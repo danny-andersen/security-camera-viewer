@@ -31,7 +31,7 @@ class WebGrid(QWidget):
         self.setLayout(self.stack)
 
         self.grid_widget = QWidget()
-        self.grid_layout = QHBoxLayout(self.grid_widget)
+        # self.grid_layout = QHBoxLayout(self.grid_widget)
         self.stack.addWidget(self.grid_widget)
 
         self.fullscreen_widget = QWidget()
@@ -43,6 +43,27 @@ class WebGrid(QWidget):
         self.showFullScreen()
 
     def init_grid(self):
+        outer_layout = QVBoxLayout()
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(4)
+        
+        top_label = QLabel("Click for Image viewer")
+        top_label.setStyleSheet("""
+            color: white;
+            font-size: 28px;
+            padding: 8px;
+        """)
+        top_label.setAlignment(Qt.AlignCenter)
+        top_label.setCursor(Qt.PointingHandCursor)
+        top_label.mousePressEvent = lambda event: self.launch_image_viewer()
+        
+        outer_layout.addWidget(top_label)
+
+        # Main horizontal layout: left + right
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(2)
+
         left_layout = QVBoxLayout()
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(2)
@@ -53,7 +74,7 @@ class WebGrid(QWidget):
         browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         label1 = QLabel(f"Click for full screen of {self.urls[0]}")
-        label1.setStyleSheet("color: white; font-size: 14px; padding: 4px;")
+        label1.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
         label1.setCursor(Qt.PointingHandCursor)
         label1.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         label1.mousePressEvent = lambda event, u=self.urls[0]: self.show_fullscreen(u)
@@ -77,8 +98,9 @@ class WebGrid(QWidget):
             browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
             label = QLabel(f"Click for full screen of {self.urls[i]}")
-            label.setStyleSheet("color: white; font-size: 14px; padding: 4px;")
+            label.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
             label.setCursor(Qt.PointingHandCursor)
+            label.setMinimumHeight(40)
             label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             label.mousePressEvent = lambda event, u=self.urls[i]: self.show_fullscreen(u)
 
@@ -88,9 +110,11 @@ class WebGrid(QWidget):
             row, col = divmod(i - 1, 2)
             right_grid.addWidget(container, row, col)
 
-        self.grid_layout.addLayout(left_layout, 1)
-        self.grid_layout.addWidget(right_widget, 2)
+        main_layout.addLayout(left_layout, 1)
+        main_layout.addWidget(right_widget, 2)
         
+        outer_layout.addLayout(main_layout)
+        self.grid_widget.setLayout(outer_layout)        
               
     def show_fullscreen(self, url):
         # Clear fullscreen layout
@@ -120,6 +144,9 @@ class WebGrid(QWidget):
 
         self.stack.setCurrentWidget(self.fullscreen_widget)
 
+    def launch_image_viewer(self):
+        import subprocess
+        subprocess.Popen(["feh --slideshow-delay 5 --fullscreen --recursive --tap-zones /home/danny/Dropbox/Photos/Bigbertha_backup/"])
     
     def restore_grid(self):
         # Clear fullscreen layout
