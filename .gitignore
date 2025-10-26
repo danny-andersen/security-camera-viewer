@@ -17,3 +17,8 @@ venv/
 # Private files
 urls.txt
 credentials.txt
+tv-remote/alternative.sh
+.gitignore
+tv-remote/RaspberryPITVHDMI
+tv-remote/README.md
+tv-remote/modification.sh
