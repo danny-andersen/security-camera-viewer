@@ -34,6 +34,7 @@ class WebGrid(QWidget):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.next_image)
         self.is_playing = False  # Track play/pause state        
+        self.breadcrumbs = []  # List of folder names
         self.setWindowTitle("Camera Monitoring")
         self.setStyleSheet("background-color: black;")
         self.stack = QStackedLayout(self)
@@ -51,6 +52,10 @@ class WebGrid(QWidget):
         self.stack.setCurrentWidget(self.grid_widget)
         self.showFullScreen()
 
+    def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Backspace:
+            self.go_up_one_folder()
+
     def init_grid(self):
         outer_layout = QVBoxLayout()
         outer_layout.setContentsMargins(0, 0, 0, 0)
@@ -62,7 +67,7 @@ class WebGrid(QWidget):
         top_layout.setSpacing(20)
 
         # Image viewer label
-        viewer_btn = QPushButton("Click for Image viewer")
+        viewer_btn = QPushButton("Image viewer")
         viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
         viewer_btn.clicked.connect(self.launch_image_viewer)
         top_layout.addWidget(viewer_btn)        
@@ -94,7 +99,7 @@ class WebGrid(QWidget):
         browser1.load(QUrl(self.urls[0]))
         browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        label1 = QLabel(f"Click for full screen of {self.urls[0]}")
+        label1 = QLabel(f"Full screen of {self.urls[0]}")
         label1.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
         label1.setCursor(Qt.PointingHandCursor)
         label1.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
@@ -118,7 +123,7 @@ class WebGrid(QWidget):
             browser.load(QUrl(self.urls[i]))
             browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-            label = QLabel(f"Click for full screen of {self.urls[i]}")
+            label = QLabel(f"Full screen of {self.urls[i]}")
             label.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
             label.setCursor(Qt.PointingHandCursor)
             label.setMinimumHeight(40)
@@ -194,6 +199,9 @@ class WebGrid(QWidget):
     def show_slideshow_or_subfolders(self, folder_path):
         self.clear_fullscreen()
 
+        # Update breadcrumbs
+        self.breadcrumbs = os.path.relpath(folder_path, SOURCE_DIR).split(os.sep)
+
         entries = os.listdir(folder_path)
         subfolders = [f for f in entries if os.path.isdir(os.path.join(folder_path, f))]
         images = [f for f in entries if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
@@ -205,11 +213,32 @@ class WebGrid(QWidget):
             return
 
         if subfolders:
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
             container = QWidget()
             layout = QVBoxLayout(container)
+            layout.setAlignment(Qt.AlignTop)
+            
+            # Breadcrumb bar
+            breadcrumb_bar = QWidget()
+            breadcrumb_layout = QHBoxLayout(breadcrumb_bar)
+            breadcrumb_layout.setContentsMargins(0, 0, 0, 0)
+            breadcrumb_layout.setSpacing(10)
+    
+            # Add clickable breadcrumb buttons
+            path_so_far = SOURCE_DIR
+            for i, crumb in enumerate(self.breadcrumbs):
+                path_so_far = os.path.join(path_so_far, crumb)
+                btn = QPushButton(crumb)
+                btn.setStyleSheet("font-size: 16px; padding: 6px; color: white; background-color: #666;")
+                btn.clicked.connect(lambda _, p=path_so_far: self.show_slideshow_or_subfolders(p))
+                breadcrumb_layout.addWidget(btn)
 
+                if i < len(self.breadcrumbs) - 1:
+                    arrow = QLabel("➔")
+                    arrow.setStyleSheet("color: white; font-size: 16px;")
+                    breadcrumb_layout.addWidget(arrow)
+
+            layout.addWidget(breadcrumb_bar)
+    
             for sub in sorted(subfolders):
                 sub_path = os.path.join(folder_path, sub)
                 btn = QPushButton(sub)
@@ -223,6 +252,8 @@ class WebGrid(QWidget):
             exit_btn.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
             layout.addWidget(exit_btn)
 
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
             scroll.setWidget(container)
             self.fullscreen_layout.addWidget(scroll)
             self.stack.setCurrentWidget(self.fullscreen_widget)
@@ -235,6 +266,15 @@ class WebGrid(QWidget):
         self.fullscreen_layout.addWidget(label)
         self.stack.setCurrentWidget(self.fullscreen_widget)
             
+    def go_up_one_folder(self):
+        if not self.breadcrumbs:
+            return  # Already at top level
+
+        # Remove last breadcrumb and rebuild path
+        self.breadcrumbs.pop()
+        new_path = os.path.join(SOURCE_DIR, *self.breadcrumbs)
+        self.show_slideshow_or_subfolders(new_path)
+
     def show_slideshow(self, folder_path):
         self.clear_fullscreen()
 

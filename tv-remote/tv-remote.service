@@ -1,0 +1,12 @@
+[Unit]
+Description=Service to provide a TV remote mouse
+
+[Service]
+User=danny
+WorkingDirectory=/home/danny/tv-remote
+ExecStart=/home/danny/tv-remote/cecremotestart.sh
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+
