@@ -1,39 +1,31 @@
 import sys
 import os
 
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QKeyEvent, QMouseEvent
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QGridLayout, QVBoxLayout, QScrollArea, QHBoxLayout, QPushButton, QLabel, QSizePolicy, QStackedLayout
+    QApplication, QWidget, QGridLayout, QVBoxLayout, QScrollArea, QHBoxLayout, QPushButton, QLabel, QSizePolicy, QStackedLayout, QFileIconProvider
 )
 from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import QUrl, Qt, QTimer
+from PyQt5.QtCore import QUrl, Qt, QTimer, QEvent, QPoint, QSize
+from enum import Enum, auto
 
 SOURCE_DIR = "/home/danny/Dropbox/Photos/Bigbertha_backup/"
 IMAGE_TIMER = 3000  # 3 seconds
 
-# List of URLs to display
-def load_urls(filename):
-    try:
-        with open(filename, "r") as f:
-            return [line.strip() for line in f if line.strip()]
-    except FileNotFoundError:
-        print(f"Error: {filename} not found.")
-        return []
-
-# class TrustedPage(QWebEnginePage):
-#     def certificateError(self, error):
-#         # Optionally check the URL before trusting
-#         # if error.url().toString().startswith("https://your-site.com"):
-#         error.ignoreCertificateError()
-#         return True
+class Mode(Enum):
+    CAMERA = auto()
+    PHOTO_FOLDER = auto()
+    SLIDESHOW = auto()
+    PLAY = auto()
     
 class WebGrid(QWidget):
-    def __init__(self, urls):
+    def __init__(self):
         super().__init__()
-        self.urls = urls[:5]
+        self.load_urls("urls.txt")
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.next_image)
-        self.is_playing = False  # Track play/pause state        
+        self.mode = Mode.CAMERA  # Track current mode
+        self.icon_provider = QFileIconProvider()
         self.breadcrumbs = []  # List of folder names
         self.setWindowTitle("Camera Monitoring")
         self.setStyleSheet("background-color: black;")
@@ -41,6 +33,7 @@ class WebGrid(QWidget):
         self.setLayout(self.stack)
 
         self.grid_widget = QWidget()
+        # self.grid_widget.setFocusPolicy(Qt.StrongFocus)
         # self.grid_layout = QHBoxLayout(self.grid_widget)
         self.stack.addWidget(self.grid_widget)
 
@@ -52,9 +45,58 @@ class WebGrid(QWidget):
         self.stack.setCurrentWidget(self.grid_widget)
         self.showFullScreen()
 
+    # List of URLs to display
+    def load_urls(self, filepath):
+        self.urls = []  
+        self.urlnames = []
+
+        try:
+            with open(filepath, "r") as f:
+                for line in f:
+                    parts = line.strip().split(",", 1)  # Split into 2 parts: name and URL
+                    if len(parts) == 2:
+                        name, url = parts
+                        self.urls.append(url.strip())
+                        self.urlnames.append(name)
+        except Exception as e:
+            print(f"Error loading URLs: {e}")
+
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Backspace:
-            self.go_up_one_folder()
+        key = event.key()
+        if self.mode in (Mode.PHOTO_FOLDER, Mode.SLIDESHOW):
+            if key == Qt.Key_Backspace:
+                self.go_up_one_folder()
+        if self.mode in (Mode.PLAY, Mode.SLIDESHOW):
+            if key == Qt.Key_Pause:
+                self.toggle_play_pause()
+            
+        focus_widget = QApplication.focusWidget()
+
+        print(f"Key pressed: {key}, Focus widget: {type(focus_widget)}, Mode: {self.mode}")
+        # if key == Qt.Key_Right or key == Qt.Key_Down:
+        #     if self.is_playing:
+        #         print("next image")
+        #         self.next_image()
+        #     else:
+        #         print("right/down pressed, sending tab")
+        #         QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
+        # elif key == Qt.Key_Left or key == Qt.Key_Up:
+        #     if self.is_playing: 
+        #         print("prev image")
+        #         self.previous_image()
+        #     else:
+        #         print("left/up pressed, sending tab")
+        #         QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.ShiftModifier))
+
+        if key == Qt.Key_Enter or key == Qt.Key_Return:
+            if isinstance(focus_widget, QPushButton):
+                focus_widget.click()
+            elif isinstance(focus_widget, QLabel):
+                # Simulate mouse click on QLabel
+                fake_event = QMouseEvent(QEvent.MouseButtonPress, QPoint(1, 1), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+                QApplication.sendEvent(focus_widget, fake_event)
+                fake_release = QMouseEvent(QEvent.MouseButtonRelease, QPoint(1, 1), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+                QApplication.sendEvent(focus_widget, fake_release)
 
     def init_grid(self):
         outer_layout = QVBoxLayout()
@@ -67,21 +109,11 @@ class WebGrid(QWidget):
         top_layout.setSpacing(20)
 
         # Image viewer label
-        viewer_btn = QPushButton("Image viewer")
+        viewer_btn = QPushButton("View Photos")
         viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
         viewer_btn.clicked.connect(self.launch_image_viewer)
-        top_layout.addWidget(viewer_btn)        
-        # top_label = QLabel("Click for Image viewer")
-        # top_label.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
-        # top_label.setAlignment(Qt.AlignLeft)
-        # top_label.setCursor(Qt.PointingHandCursor)
-        # top_label.mousePressEvent = lambda event: self.launch_image_viewer()
-        # top_layout.addWidget(top_label)
-        # Exit button
-        exit_btn = QPushButton("Exit")
-        exit_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
-        exit_btn.clicked.connect(QApplication.instance().quit)
-        top_layout.addWidget(exit_btn)        
+        viewer_btn.setFocusPolicy(Qt.StrongFocus)
+        top_layout.addWidget(viewer_btn)
         
         outer_layout.addWidget(top_row)
 
@@ -99,14 +131,27 @@ class WebGrid(QWidget):
         browser1.load(QUrl(self.urls[0]))
         browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        label1 = QLabel(f"Full screen of {self.urls[0]}")
-        label1.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
-        label1.setCursor(Qt.PointingHandCursor)
-        label1.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        label1.mousePressEvent = lambda event, u=self.urls[0]: self.show_fullscreen(u)
+        fsbutton0 = QPushButton(self.urlnames[0])
+        fsbutton0.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+        fsbutton0.setCursor(Qt.PointingHandCursor)
+        fsbutton0.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        fsbutton0.setFocusPolicy(Qt.StrongFocus)
+        fsbutton0.clicked.connect(lambda event, u=0: self.show_fullscreen(u))
+        # fsbutton0.mousePressEvent = lambda event, u=self.urls[0]: self.show_fullscreen(u)
+        # fsbutton0.setAttribute(Qt.WA_TransparentForMouseEvents, False)  # Optional: allows mouse + keyboard
 
         left_layout.addWidget(browser1)
-        left_layout.addWidget(label1)
+        left_layout.addWidget(fsbutton0)
 
         # Screens 2–5 (right grid)
         right_widget = QWidget()
@@ -123,15 +168,26 @@ class WebGrid(QWidget):
             browser.load(QUrl(self.urls[i]))
             browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-            label = QLabel(f"Full screen of {self.urls[i]}")
-            label.setStyleSheet("color: white; font-size: 28px; padding: 8px;")
-            label.setCursor(Qt.PointingHandCursor)
-            label.setMinimumHeight(40)
-            label.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-            label.mousePressEvent = lambda event, u=self.urls[i]: self.show_fullscreen(u)
+            button = QPushButton(self.urlnames[i])
+            button.setStyleSheet("""
+                QPushButton {
+                    color: white;
+                    font-size: 28px;
+                    padding: 8px;
+                }
+                QPushButton:focus {
+                    border: 2px solid #00ffff;
+                    background-color: #222;
+                }
+            """)
+            button.setCursor(Qt.PointingHandCursor)
+            button.setFocusPolicy(Qt.StrongFocus)
+            button.setMinimumHeight(40)
+            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+            button.clicked.connect(lambda event, u=i: self.show_fullscreen(u))
 
             layout.addWidget(browser)
-            layout.addWidget(label)
+            layout.addWidget(button)
 
             row, col = divmod(i - 1, 2)
             right_grid.addWidget(container, row, col)
@@ -140,9 +196,10 @@ class WebGrid(QWidget):
         main_layout.addWidget(right_widget, 2)
         
         outer_layout.addLayout(main_layout)
-        self.grid_widget.setLayout(outer_layout)        
+        self.grid_widget.setLayout(outer_layout)     
+        viewer_btn.setFocus()   
               
-    def show_fullscreen(self, url):
+    def show_fullscreen(self, index):
         # Clear fullscreen layout
         while self.fullscreen_layout.count():
             child = self.fullscreen_layout.takeAt(0)
@@ -150,19 +207,11 @@ class WebGrid(QWidget):
                 child.widget().deleteLater()
 
         browser = QWebEngineView()
-        # host = url.split("//")[1]
-        # authUrl = url
-        # for domain in self.credentials:
-        #     if domain in url:
-        #         username, password = self.credentials[domain]
-        #         authUrl = f"http://{username}:{password}@{host}"
-        #         break
-        # # browser.setPage(TrustedPage(profile, browser))
-        # print(f"Using auth URL: {authUrl}")
-        browser.load(QUrl(url))
+        browser.load(QUrl(self.urls[index]))
 
-        back_button = QPushButton("Back to All Cameras")
-        back_button.setStyleSheet("color: white; font-size: 18px; padding: 10px;")
+        back_button = QPushButton(f"Back to All Cameras")
+        back_button.setFocusPolicy(Qt.StrongFocus)
+        back_button.setStyleSheet("color: white; font-size: 28px; padding: 10px;")
         back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
 
         self.fullscreen_layout.addWidget(back_button)
@@ -173,28 +222,13 @@ class WebGrid(QWidget):
     def launch_image_viewer(self):
         self.timer.stop()
         self.clear_fullscreen()
+        self.mode = Mode.PHOTO_FOLDER
+        self.show_slideshow_or_subfolders(SOURCE_DIR)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        container = QWidget()
-        layout = QVBoxLayout(container)
-
-        back_button = QPushButton("Back to All Cameras")
-        back_button.setStyleSheet("font-size: 24px; padding: 10px; color: white;")
-        back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
-        layout.addWidget(back_button)
-
-        for folder in os.listdir(SOURCE_DIR):
-            folder_path = os.path.join(SOURCE_DIR, folder)
-            if os.path.isdir(folder_path):
-                btn = QPushButton(folder)
-                btn.setStyleSheet("font-size: 24px; padding: 10px; color: white;")
-                btn.clicked.connect(lambda _, p=folder_path: self.show_slideshow_or_subfolders(p))
-                layout.addWidget(btn)
-
-        scroll.setWidget(container)
-        self.fullscreen_layout.addWidget(scroll)
-        self.stack.setCurrentWidget(self.fullscreen_widget)
+    def show_images(self, folder_path, images):
+        self.slideshow_index = 0
+        self.slideshow_images = [os.path.join(folder_path, f) for f in sorted(images)]
+        self.show_slideshow(folder_path)
 
     def show_slideshow_or_subfolders(self, folder_path):
         self.clear_fullscreen()
@@ -206,84 +240,170 @@ class WebGrid(QWidget):
         subfolders = [f for f in entries if os.path.isdir(os.path.join(folder_path, f))]
         images = [f for f in entries if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
 
-        if images:
-            self.slideshow_index = 0
-            self.slideshow_images = [os.path.join(folder_path, f) for f in sorted(images)]
-            self.show_slideshow(folder_path)
+        if images and not subfolders:
+            self.show_images(folder_path, images)
             return
 
         if subfolders:
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setAlignment(Qt.AlignTop)
-            
-            # Breadcrumb bar
-            breadcrumb_bar = QWidget()
-            breadcrumb_layout = QHBoxLayout(breadcrumb_bar)
-            breadcrumb_layout.setContentsMargins(0, 0, 0, 0)
-            breadcrumb_layout.setSpacing(10)
     
-            # Add clickable breadcrumb buttons
-            path_so_far = SOURCE_DIR
-            for i, crumb in enumerate(self.breadcrumbs):
-                path_so_far = os.path.join(path_so_far, crumb)
-                btn = QPushButton(crumb)
-                btn.setStyleSheet("font-size: 16px; padding: 6px; color: white; background-color: #666;")
-                btn.clicked.connect(lambda _, p=path_so_far: self.show_slideshow_or_subfolders(p))
-                breadcrumb_layout.addWidget(btn)
+            label = QLabel(f"{self.breadcrumbs[-1]} Folder" if self.breadcrumbs and self.breadcrumbs != ['.'] else "All Photo Folders")
+            label.setStyleSheet("font-size: 28px; color: white;")
+            label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(label)
 
-                if i < len(self.breadcrumbs) - 1:
-                    arrow = QLabel("➔")
-                    arrow.setStyleSheet("color: white; font-size: 16px;")
-                    breadcrumb_layout.addWidget(arrow)
+            if self.breadcrumbs:
+                # Breadcrumb bar
+                breadcrumb_bar = QWidget()
+                breadcrumb_layout = QHBoxLayout(breadcrumb_bar)
+                breadcrumb_layout.setContentsMargins(0, 0, 0, 0)
+                breadcrumb_layout.setSpacing(10)
 
-            layout.addWidget(breadcrumb_bar)
+                back_button = QPushButton("Back to All Cameras")
+                back_button.setFocusPolicy(Qt.StrongFocus)
+                back_button.setStyleSheet("""
+                    QPushButton {
+                        color: white;
+                        font-size: 28px;
+                        padding: 8px;
+                    }
+                    QPushButton:focus {
+                        border: 2px solid #00ffff;
+                        background-color: #222;
+                    }
+                """)
+                back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
+                breadcrumb_layout.addWidget(back_button)
+
+                if folder_path != SOURCE_DIR:
+                    root_button = QPushButton("Back to Top Level")
+                    root_button.setFocusPolicy(Qt.StrongFocus)
+                    root_button.setStyleSheet("""
+                        QPushButton {
+                            color: white;
+                            font-size: 28px;
+                            padding: 8px;
+                        }
+                        QPushButton:focus {
+                            border: 2px solid #00ffff;
+                            background-color: #222;
+                        }
+                    """)
+                    root_button.clicked.connect(lambda: self.show_slideshow_or_subfolders(SOURCE_DIR))
+                    breadcrumb_layout.addWidget(root_button)
+        
+                # Add clickable breadcrumb buttons
+                path_so_far = SOURCE_DIR
+                for i, crumb in enumerate(self.breadcrumbs):
+                    path_so_far = os.path.join(path_so_far, crumb)
+                    if path_so_far == folder_path or crumb == '.':
+                        continue # Skip current folder
+                    btn = QPushButton(f"Back to {crumb}")
+                    btn.setFocusPolicy(Qt.StrongFocus)
+                    btn.setStyleSheet("""
+                        QPushButton {
+                            color: white;
+                            font-size: 28px;
+                            padding: 8px;
+                        }
+                        QPushButton:focus {
+                            border: 2px solid #00ffff;
+                            background-color: #222;
+                        }
+                    """)
+                    btn.clicked.connect(lambda _, p=path_so_far: self.show_slideshow_or_subfolders(p))
+                    breadcrumb_layout.addWidget(btn)
+
+                layout.addWidget(breadcrumb_bar)
+
+            if images:
+                info_label = QLabel(f"Photos in this folder ({len(images)})")
+                info_label.setFocusPolicy(Qt.StrongFocus)
+                info_label.setStyleSheet("""
+                    QPushButton {
+                        color: white;
+                        font-size: 28px;
+                        padding: 8px;
+                    }
+                    QPushButton:focus {
+                        border: 2px solid #00ffff;
+                        background-color: #222;
+                    }
+                """)
+                info_label.clicked.connect(lambda: self.show_images(folder_path, images))
+                layout.addWidget(info_label)
+                
     
-            for sub in sorted(subfolders):
+            # Grid for folder buttons
+            grid = QGridLayout()
+            grid.setSpacing(15)
+            cols = 3  # Number of columns in the grid            
+            for i, sub in enumerate(sorted(subfolders)):
                 sub_path = os.path.join(folder_path, sub)
                 btn = QPushButton(sub)
-                btn.setStyleSheet("font-size: 24px; padding: 10px; color: white; background-color: #444;")
+                btn.setStyleSheet("""
+                    QPushButton {
+                        color: white;
+                        font-size: 28px;
+                        padding: 8px;
+                    }
+                    QPushButton:focus {
+                        border: 2px solid #00ffff;
+                        background-color: #222;
+                    }
+                """)
+                btn.setFocusPolicy(Qt.StrongFocus)
                 btn.clicked.connect(lambda _, p=sub_path: self.show_slideshow_or_subfolders(p))
-                layout.addWidget(btn)
+                icon = self.icon_provider.icon(QFileIconProvider.Folder)
+                btn.setIcon(icon)
+                btn.setIconSize(QSize(32, 32))
+                btn.setMinimumSize(120, 60)                
+                row, col = divmod(i, cols)
+                print(f"Adding button for {sub} at row {row}, col {col}")
+                grid.addWidget(btn, row, col)
 
-            # Exit button
-            exit_btn = QPushButton("Back to Folders")
-            exit_btn.setStyleSheet("font-size: 20px; padding: 12px; color: white; background-color: #444;")
-            exit_btn.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
-            layout.addWidget(exit_btn)
+            layout.addLayout(grid)
 
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setWidget(container)
             self.fullscreen_layout.addWidget(scroll)
             self.stack.setCurrentWidget(self.fullscreen_widget)
+            back_button.setFocus()
             return
 
         # If no images or subfolders
         label = QLabel("No images or folders found.")
-        label.setStyleSheet("font-size: 24px; color: white;")
+        label.setStyleSheet("font-size: 32px; color: red;")
         label.setAlignment(Qt.AlignCenter)
         self.fullscreen_layout.addWidget(label)
         self.stack.setCurrentWidget(self.fullscreen_widget)
             
     def go_up_one_folder(self):
-        if not self.breadcrumbs:
-            return  # Already at top level
-
-        # Remove last breadcrumb and rebuild path
-        self.breadcrumbs.pop()
-        new_path = os.path.join(SOURCE_DIR, *self.breadcrumbs)
-        self.show_slideshow_or_subfolders(new_path)
+        print (f"backspace pressed {self.breadcrumbs}")
+        self.timer.stop()
+        self.mode = Mode.PHOTO_FOLDER
+        if not self.breadcrumbs or self.breadcrumbs == ['.']:
+            # Already at top level - back to cameras
+            self.stack.setCurrentWidget(self.grid_widget)
+        else:
+            # Remove last breadcrumb and rebuild path
+            self.breadcrumbs.pop()
+            new_path = os.path.join(SOURCE_DIR, *self.breadcrumbs)
+            self.show_slideshow_or_subfolders(new_path)
 
     def show_slideshow(self, folder_path):
         self.clear_fullscreen()
+        self.mode = Mode.SLIDESHOW
 
         image_files = [f for f in os.listdir(folder_path)
                     if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
 
         if not image_files:
-            label = QLabel("No images found.")
-            label.setStyleSheet("font-size: 24px; color: white;")
+            label = QLabel("No images found!")
+            label.setStyleSheet("font-size: 32px; color: red;")
             label.setAlignment(Qt.AlignCenter)
             self.fullscreen_layout.addWidget(label)
             self.stack.setCurrentWidget(self.fullscreen_widget)
@@ -298,6 +418,12 @@ class WebGrid(QWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
 
+        label = QLabel(f"Photos from {self.breadcrumbs[len(self.breadcrumbs)-1]}" if self.breadcrumbs and self.breadcrumbs != ['.'] else "Slideshow"
+)
+        label.setStyleSheet("font-size: 28px; color: white;")
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
+        
         # Navigation buttons in horizontal layout
         button_row = QWidget()
         button_layout = QHBoxLayout(button_row)
@@ -305,24 +431,68 @@ class WebGrid(QWidget):
         button_layout.setSpacing(20)
 
         prev_btn = QPushButton("Previous")
-        prev_btn.setStyleSheet("font-size: 20px; padding: 12px; color: white; background-color: #444;")
+        prev_btn.setFocusPolicy(Qt.StrongFocus)
+        prev_btn.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
         prev_btn.clicked.connect(self.previous_image)
         button_layout.addWidget(prev_btn)
         
         next_btn = QPushButton("Next")
-        next_btn.setStyleSheet("font-size: 20px; padding: 12px; color: white; background-color: #444;")
+        next_btn.setFocusPolicy(Qt.StrongFocus)
+        next_btn.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
         next_btn.clicked.connect(self.next_image)
         button_layout.addWidget(next_btn)
 
         # Play/Pause toggle
         self.play_pause_btn = QPushButton("Play")
-        self.play_pause_btn.setStyleSheet("font-size: 20px; padding: 12px; color: white; background-color: #444;")
+        self.play_pause_btn.setFocusPolicy(Qt.StrongFocus)
+        self.play_pause_btn.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
         self.play_pause_btn.clicked.connect(self.toggle_play_pause)
         button_layout.addWidget(self.play_pause_btn)
 
-        back_btn = QPushButton("Back to Folders")
-        back_btn.setStyleSheet("font-size: 20px; padding: 12px; color: white; background-color: #444;")
-        back_btn.clicked.connect(self.launch_image_viewer)
+        back_btn = QPushButton("Back to Previous Folder")
+        back_btn.setFocusPolicy(Qt.StrongFocus)
+        back_btn.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+        back_btn.clicked.connect(self.go_up_one_folder)
         button_layout.addWidget(back_btn)
 
         layout.addWidget(button_row)
@@ -338,8 +508,7 @@ class WebGrid(QWidget):
 
         self.show_image()
         self.stack.setCurrentWidget(self.fullscreen_widget)
-        self.is_playing = False
-        self.play_pause_btn.setText("Play")        
+        self.play_pause_btn.setFocus()
 
     def clear_fullscreen(self):
         self.timer.stop()
@@ -369,39 +538,40 @@ class WebGrid(QWidget):
             self.slideshow_label.setPixmap(pixmap)
 
     def next_image(self):
-        if self.is_playing:
+        if self.mode == Mode.PLAY:
             self.timer.stop()
-            self.is_playing = False
             self.timer.start(IMAGE_TIMER)  # Restart  countdown
         self.slideshow_index = self.slideshow_index + 1
         if self.slideshow_index > len(self.slideshow_images) - 1:
             self.timer.stop()
-            self.is_playing = False
+            self.mode = Mode.PHOTO_FOLDER
             self.slideshow_index = len(self.slideshow_images) - 1
-            self.launch_image_viewer()
+            self.go_up_one_folder()
         self.show_image()
     
     def previous_image(self):
-        if self.is_playing:
+        if self.mode == Mode.PLAY:
             self.timer.stop()
             self.timer.start(IMAGE_TIMER)  # Restart  countdown
         self.slideshow_index = self.slideshow_index - 1
         if self.slideshow_index < 0:
-            self.slideshow_index = 0
+            self.slideshow_index = len(self.slideshow_images) - 1
         self.show_image()
 
     def toggle_play_pause(self):
-        if self.is_playing:
+        # Only allow play/pause if slideshow is active
+        # if not hasattr(self, "slideshow_images") or not self.slideshow_images:
+        #     return  # Not in slideshow mode
+        if self.mode not in (Mode.PLAY, Mode.SLIDESHOW):
+            return  # Not in slideshow mode
+        if self.mode == Mode.PLAY:
             self.timer.stop()
             self.play_pause_btn.setText("Play")
-            self.is_playing = False
+            self.mode = Mode.SLIDESHOW
         else:
-            self.timer.start(IMAGE_TIMER)  # 5 seconds
+            self.timer.start(IMAGE_TIMER)
             self.play_pause_btn.setText("Pause")
-            self.is_playing = True    
-    # def launch_image_viewer(self):
-    #     import subprocess
-    #     subprocess.Popen(["feh", "--slideshow-delay","3", "--fullscreen", "--recursive", "/home/danny/Dropbox/Photos/Bigbertha_backup/"])
+            self.mode = Mode.PLAY
     
     def restore_grid(self):
         # Clear fullscreen layout
@@ -414,12 +584,23 @@ class WebGrid(QWidget):
         self.init_layout()
         
 if __name__ == "__main__":
-    urls = load_urls("urls.txt")
-    if not urls:
-        sys.exit("No URLs to display.")
-    # creds = load_credentials("credentials.txt")
     app = QApplication(sys.argv)
-    window = WebGrid(urls)
+
+    app.setStyleSheet("""
+        QPushButton:focus, QLabel:focus {
+            border: 2px solid #00ffff;
+            background-color: #333;
+            color: white;
+        }
+        QPushButton:hover {
+            background-color: #444;
+        }
+        QLabel:focus {
+            border: 2px solid #00ffff;
+            background-color: #222;
+        }
+    """) 
+    window = WebGrid()
     window.show()
     sys.exit(app.exec_())
     

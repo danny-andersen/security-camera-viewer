@@ -44,6 +44,55 @@ do
             datlastkey=$datnow
             strlastkey=$strkey
             case "$strkey" in
+                "channel up")
+                    xdotool click 4 #mouse scroll up
+                    ;;
+                "channel down")
+                    xdotool click 5 #mouse scroll down
+                    ;;
+                "channels list")
+                    xdotool click 3 #right mouse button click"
+                    ;;
+                # "up")
+                #     intpixels=$((-1 * intmousespeed))
+                #     xdotool mousemove_relative -- 0 $intpixels #move mouse up
+                #     intmousespeed=$((intmousespeed + intmouseacc)) #speed up
+                #     ;;
+                # "down")
+                #     intpixels=$(( 1 * intmousespeed))
+                #     xdotool mousemove_relative -- 0 $intpixels #move mouse down
+                #     intmousespeed=$((intmousespeed + intmouseacc)) #speed up
+                #     ;;
+                # "left")
+                #     intpixels=$((-1 * intmousespeed))
+                #     xdotool mousemove_relative -- $intpixels 0 #move mouse left
+                #     intmousespeed=$((intmousespeed + intmouseacc)) #speed up
+                #     ;;
+                # "right")
+                #     intpixels=$(( 1 * intmousespeed))
+                #     xdotool mousemove_relative -- $intpixels 0 #move mouse right
+                #     intmousespeed=$((intmousespeed + intmouseacc)) #speed up
+                #     ;;
+                # "stop")
+                #     ## with my remote I only got "STOP" as key released (auto-released), not as key pressed; see below
+                #     echo Key Pressed: STOP
+                #     ;;
+                # *)
+                #     echo Unrecognized Key Pressed: $strkey ; CEC Line: $keyline
+                #     ;;
+                    
+            esac
+        fi
+        if [ -n "$strreleased" ]; then
+            #echo $keyline --- debug
+            if [ "$strkey" = "$strlastkey" ] && [ "$datdiff" -lt "$intmsbetweenkeys" ]; then
+                intkeychar=$((intkeychar + 1)) #same key pressed for a different char
+            else
+                intkeychar=0 #different key / too far apart
+            fi
+            datlastkey=$datnow
+            strlastkey=$strkey
+            case "$strkey" in
                 "1")
                     xdotool key "BackSpace"
                     ;;
@@ -74,40 +123,23 @@ do
                 "0")
                     keychar " 0.-" intkeychar
                     ;;
+                "F2") 
+                    xdotool key "F2" # Red
+                    ;;
+                "F3") 
+                    xdotool key "F3" # Green
+                    ;;
+                "F4") 
+                    xdotool key "F4" # Yellow
+                    ;;
+                "F1")
+                    xdotool key "F1" # Blue
+                    ;;
                 "previous channel")
                     xdotool key "Return" #Enter
                     ;;
-                "channel up")
-                    xdotool click 4 #mouse scroll up
-                    ;;
-                "channel down")
-                    xdotool click 5 #mouse scroll down
-                    ;;
-                "channels list")
-                    xdotool click 3 #right mouse button click"
-                    ;;
-                "up")
-                    intpixels=$((-1 * intmousespeed))
-                    xdotool mousemove_relative -- 0 $intpixels #move mouse up
-                    intmousespeed=$((intmousespeed + intmouseacc)) #speed up
-                    ;;
-                "down")
-                    intpixels=$(( 1 * intmousespeed))
-                    xdotool mousemove_relative -- 0 $intpixels #move mouse down
-                    intmousespeed=$((intmousespeed + intmouseacc)) #speed up
-                    ;;
-                "left")
-                    intpixels=$((-1 * intmousespeed))
-                    xdotool mousemove_relative -- $intpixels 0 #move mouse left
-                    intmousespeed=$((intmousespeed + intmouseacc)) #speed up
-                    ;;
-                "right")
-                    intpixels=$(( 1 * intmousespeed))
-                    xdotool mousemove_relative -- $intpixels 0 #move mouse right
-                    intmousespeed=$((intmousespeed + intmouseacc)) #speed up
-                    ;;
                 "select")
-                    xdotool click 1 #left mouse button click
+                    xdotool key "Return" #Enter
                     ;;
                 "return")
                     xdotool key "BackSpace"
@@ -115,58 +147,37 @@ do
                 "exit")
                     xdotool key "BackSpace"
                     ;;
-                "F2")
-                    chromium-browser "https://www.youtube.com" &
-                    ;;
-                "F3")
-                    chromium-browser "https://www.google.com" &
-                    ;;
-                "F4")
-                    echo Key Pressed: YELLOW C
-                    ;;
-                "F1")
-                    chromium-browser --incognito "https://www.google.com" &
+                "stop")
+                    xdotool key "Pause"
                     ;;
                 "rewind")
                     echo Key Pressed: REWIND
                     ;;
                 "pause")
-                    echo Key Pressed: PAUSE
+                    xdotool key "Pause"
                     ;;
                 "Fast forward")
                     echo Key Pressed: FAST FORWARD
                     ;;
                 "play")
-                    echo Key Pressed: PLAY
-                    ;;
-                "stop")
-                    ## with my remote I only got "STOP" as key released (auto-released), not as key pressed; see below
-                    echo Key Pressed: STOP
-                    ;;
-                *)
-                    echo Unrecognized Key Pressed: $strkey ; CEC Line: $keyline
-                    ;;
-                    
-            esac
-        fi
-        if [ -n "$strreleased" ]; then
-            #echo $keyline --- debug
-            case "$strkey" in
-                "stop")
-                    echo Key Released: STOP
+                    xdotool key "Pause"
                     ;;
                 "up")
-                    intmousespeed=$intmousestartspeed #reset mouse speed
+                    xdotool key "Up"
                     ;;
                 "down")
-                    intmousespeed=$intmousestartspeed #reset mouse speed
+                    xdotool key "Down"
                     ;;
                 "left")
-                    intmousespeed=$intmousestartspeed #reset mouse speed
+                    xdotool key "Left"
                     ;;
                 "right")
-                    intmousespeed=$intmousestartspeed #reset mouse speed
+                    xdotool key "Right"
                     ;;
+                *)
+                    echo Unrecognized Key Released: $strkey ; CEC Line: $keyline
+                    ;;
+                    
             esac
         fi
     fi
