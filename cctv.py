@@ -63,9 +63,12 @@ class WebGrid(QWidget):
 
     def keyPressEvent(self, event):
         key = event.key()
-        if self.mode in (Mode.PHOTO_FOLDER, Mode.SLIDESHOW):
-            if key == Qt.Key_Backspace:
+        if key == Qt.Key_Backspace:
+            if self.mode in (Mode.PHOTO_FOLDER, Mode.SLIDESHOW, Mode.PLAY):
                 self.go_up_one_folder()
+            else:
+                # In CAMERA mode, set focus to image viewer button
+                self.viewer_btn.setFocus()
         if self.mode in (Mode.PLAY, Mode.SLIDESHOW):
             if key == Qt.Key_Pause:
                 self.toggle_play_pause()
@@ -73,21 +76,61 @@ class WebGrid(QWidget):
         focus_widget = QApplication.focusWidget()
 
         print(f"Key pressed: {key}, Focus widget: {type(focus_widget)}, Mode: {self.mode}")
-        # if key == Qt.Key_Right or key == Qt.Key_Down:
-        #     if self.is_playing:
-        #         print("next image")
-        #         self.next_image()
-        #     else:
-        #         print("right/down pressed, sending tab")
-        #         QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
-        # elif key == Qt.Key_Left or key == Qt.Key_Up:
-        #     if self.is_playing: 
-        #         print("prev image")
-        #         self.previous_image()
-        #     else:
-        #         print("left/up pressed, sending tab")
-        #         QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.ShiftModifier))
-
+        if key in (Qt.Key_Right, Qt.Key_Down, Qt.Key_L, Qt.Key_J):
+            if self.mode == Mode.PLAY:
+                # Next image in PLAY mode
+                print("next image")
+                self.next_image()
+                return
+            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA:
+                # In SLIDESHOW or CAMERA mode, move focus to next widget
+                print("right/down pressed, sending tab")
+                QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
+                return
+            elif self.mode == Mode.PHOTO_FOLDER:
+                if key == Qt.Key_L:
+                    # print("L key pressed in PHOTO_FOLDER, move to next widget")
+                    QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
+                    return
+                elif key == Qt.Key_J:
+                    print("J key pressed in PHOTO_FOLDER, move down widget")
+                    for r, row in enumerate(self.folder_buttons):
+                        for c, btn in enumerate(row):
+                            if btn is focus_widget:
+                                # Move to next row, same column
+                                if r + 1 < len(self.folder_buttons):
+                                    next_row = self.folder_buttons[r + 1]
+                                    if c < len(next_row):
+                                        next_row[c].setFocus()
+                                        if self.folder_scroll_area:
+                                            self.folder_scroll_area.ensureWidgetVisible(next_row[c])
+                                        return                    
+        elif key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_H, Qt.Key_K):
+            if self.mode == Mode.PLAY:
+                print("prev image")
+                self.previous_image()
+                return
+            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA:
+                print("left/up pressed, sending tab")
+                QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.NoModifier))
+                return
+            elif self.mode == Mode.PHOTO_FOLDER:
+                if key == Qt.Key_H:
+                    print("H key pressed in PHOTO_FOLDER, move to prev widget")
+                    QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.NoModifier))
+                    return
+                elif key == Qt.Key_K:
+                    print("K key pressed in PHOTO_FOLDER, move up widget")
+                    for r, row in enumerate(self.folder_buttons):
+                            for c, btn in enumerate(row):
+                                if btn is focus_widget:
+                                    if r - 1 >= 0:
+                                        prev_row = self.folder_buttons[r - 1]
+                                        if c < len(prev_row):
+                                            prev_row[c].setFocus()
+                                            if self.folder_scroll_area:
+                                                self.folder_scroll_area.ensureWidgetVisible(prev_row[c])
+                                            return
         if key == Qt.Key_Enter or key == Qt.Key_Return:
             if isinstance(focus_widget, QPushButton):
                 focus_widget.click()
@@ -109,11 +152,11 @@ class WebGrid(QWidget):
         top_layout.setSpacing(20)
 
         # Image viewer label
-        viewer_btn = QPushButton("View Photos")
-        viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
-        viewer_btn.clicked.connect(self.launch_image_viewer)
-        viewer_btn.setFocusPolicy(Qt.StrongFocus)
-        top_layout.addWidget(viewer_btn)
+        self.viewer_btn = QPushButton("View Photos")
+        self.viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
+        self.viewer_btn.clicked.connect(self.launch_image_viewer)
+        self.viewer_btn.setFocusPolicy(Qt.StrongFocus)
+        top_layout.addWidget(self.viewer_btn)
         
         outer_layout.addWidget(top_row)
 
@@ -197,7 +240,7 @@ class WebGrid(QWidget):
         
         outer_layout.addLayout(main_layout)
         self.grid_widget.setLayout(outer_layout)     
-        viewer_btn.setFocus()   
+        self.viewer_btn.setFocus()   
               
     def show_fullscreen(self, index):
         # Clear fullscreen layout
@@ -245,14 +288,16 @@ class WebGrid(QWidget):
             return
 
         if subfolders:
+            self.folder_buttons = []
             container = QWidget()
             layout = QVBoxLayout(container)
             layout.setAlignment(Qt.AlignTop)
     
-            label = QLabel(f"{self.breadcrumbs[-1]} Folder" if self.breadcrumbs and self.breadcrumbs != ['.'] else "All Photo Folders")
+            label = QLabel(f"{self.breadcrumbs[-1]} Folder" if self.breadcrumbs and self.breadcrumbs != ['.'] else "Top Level Folder")
             label.setStyleSheet("font-size: 28px; color: white;")
             label.setAlignment(Qt.AlignCenter)
             layout.addWidget(label)
+            row_buttons = []
 
             if self.breadcrumbs:
                 # Breadcrumb bar
@@ -276,6 +321,7 @@ class WebGrid(QWidget):
                 """)
                 back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
                 breadcrumb_layout.addWidget(back_button)
+                row_buttons.append(back_button)
 
                 if folder_path != SOURCE_DIR:
                     root_button = QPushButton("Back to Top Level")
@@ -293,6 +339,7 @@ class WebGrid(QWidget):
                     """)
                     root_button.clicked.connect(lambda: self.show_slideshow_or_subfolders(SOURCE_DIR))
                     breadcrumb_layout.addWidget(root_button)
+                    row_buttons.append(root_button)
         
                 # Add clickable breadcrumb buttons
                 path_so_far = SOURCE_DIR
@@ -315,31 +362,36 @@ class WebGrid(QWidget):
                     """)
                     btn.clicked.connect(lambda _, p=path_so_far: self.show_slideshow_or_subfolders(p))
                     breadcrumb_layout.addWidget(btn)
+                    row_buttons.append(btn)
 
                 layout.addWidget(breadcrumb_bar)
 
             if images:
-                info_label = QLabel(f"Photos in this folder ({len(images)})")
-                info_label.setFocusPolicy(Qt.StrongFocus)
-                info_label.setStyleSheet("""
+                photo_btn = QPushButton(f"Photos in this folder ({len(images)})")
+                photo_btn.setFocusPolicy(Qt.StrongFocus)
+                photo_btn.setStyleSheet("""
                     QPushButton {
                         color: white;
                         font-size: 28px;
                         padding: 8px;
                     }
                     QPushButton:focus {
-                        border: 2px solid #00ffff;
+                        border: 2px solid #00ffff;k
                         background-color: #222;
                     }
                 """)
-                info_label.clicked.connect(lambda: self.show_images(folder_path, images))
-                layout.addWidget(info_label)
-                
+                photo_btn.clicked.connect(lambda: self.show_images(folder_path, images))
+                layout.addWidget(photo_btn)
+                row_buttons.append(photo_btn)
+
+            # Add row of buttons to list of navigable grid buttons
+            self.folder_buttons.append(row_buttons)
     
             # Grid for folder buttons
             grid = QGridLayout()
             grid.setSpacing(15)
-            cols = 3  # Number of columns in the grid            
+            cols = 3  # Number of columns in the grid
+                
             for i, sub in enumerate(sorted(subfolders)):
                 sub_path = os.path.join(folder_path, sub)
                 btn = QPushButton(sub)
@@ -361,15 +413,22 @@ class WebGrid(QWidget):
                 btn.setIconSize(QSize(32, 32))
                 btn.setMinimumSize(120, 60)                
                 row, col = divmod(i, cols)
-                print(f"Adding button for {sub} at row {row}, col {col}")
+                if col == 0:
+                    if row > 0:
+                        self.folder_buttons.append(row_buttons)
+                    row_buttons = []
+                row_buttons.append(btn)
+                # print(f"Adding button for {sub} at row {row}, col {col}")
                 grid.addWidget(btn, row, col)
 
+            if row_buttons:
+                self.folder_buttons.append(row_buttons)
             layout.addLayout(grid)
 
-            scroll = QScrollArea()
-            scroll.setWidgetResizable(True)
-            scroll.setWidget(container)
-            self.fullscreen_layout.addWidget(scroll)
+            self.folder_scroll_area = QScrollArea()
+            self.folder_scroll_area.setWidgetResizable(True)
+            self.folder_scroll_area.setWidget(container)
+            self.fullscreen_layout.addWidget(self.folder_scroll_area)
             self.stack.setCurrentWidget(self.fullscreen_widget)
             back_button.setFocus()
             return
@@ -560,8 +619,6 @@ class WebGrid(QWidget):
 
     def toggle_play_pause(self):
         # Only allow play/pause if slideshow is active
-        # if not hasattr(self, "slideshow_images") or not self.slideshow_images:
-        #     return  # Not in slideshow mode
         if self.mode not in (Mode.PLAY, Mode.SLIDESHOW):
             return  # Not in slideshow mode
         if self.mode == Mode.PLAY:

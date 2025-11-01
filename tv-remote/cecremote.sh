@@ -162,17 +162,18 @@ do
                 "play")
                     xdotool key "Pause"
                     ;;
-                "up")
-                    xdotool key "Up"
-                    ;;
                 "down")
-                    xdotool key "Down"
+                    #Use vi like keys for up/down/left/right to avoid conflicts with other keybindings
+                    xdotool key "j"
+                    ;;
+                "up")
+                    xdotool key "k"
                     ;;
                 "left")
-                    xdotool key "Left"
+                    xdotool key "h"
                     ;;
                 "right")
-                    xdotool key "Right"
+                    xdotool key "l"
                     ;;
                 *)
                     echo Unrecognized Key Released: $strkey ; CEC Line: $keyline
