@@ -14,6 +14,7 @@ IMAGE_TIMER = 3000  # 3 seconds
 
 class Mode(Enum):
     CAMERA = auto()
+    CAMERA_FULLSCREEN = auto()
     PHOTO_FOLDER = auto()
     SLIDESHOW = auto()
     PLAY = auto()
@@ -66,14 +67,32 @@ class WebGrid(QWidget):
         if key == Qt.Key_Backspace:
             if self.mode in (Mode.PHOTO_FOLDER, Mode.SLIDESHOW, Mode.PLAY):
                 self.go_up_one_folder()
-            else:
+                return
+            elif self.mode == Mode.CAMERA:
                 # In CAMERA mode, set focus to image viewer button
                 self.viewer_btn.setFocus()
+                return
+            elif self.mode == Mode.CAMERA_FULLSCREEN:
+                # Go back to grid view
+                self.showCameras()
+                return
         if self.mode in (Mode.PLAY, Mode.SLIDESHOW):
             if key == Qt.Key_Pause:
                 self.toggle_play_pause()
             
         focus_widget = QApplication.focusWidget()
+        
+        if self.mode == Mode.CAMERA:
+            if key == Qt.Key_1:
+                self.show_fullscreen(0)
+            elif key == Qt.Key_2:
+                self.show_fullscreen(1)
+            elif key == Qt.Key_3:
+                self.show_fullscreen(2)
+            elif key == Qt.Key_4:
+                self.show_fullscreen(3)
+            elif key == Qt.Key_5:
+                self.show_fullscreen(4)
 
         print(f"Key pressed: {key}, Focus widget: {type(focus_widget)}, Mode: {self.mode}")
         if key in (Qt.Key_Right, Qt.Key_Down, Qt.Key_L, Qt.Key_J):
@@ -178,7 +197,7 @@ class WebGrid(QWidget):
         browser1.loadFinished.connect(lambda success, b=browser1: self.handle_load_finished(b, success))        
         browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        fsbutton0 = QPushButton(self.urlnames[0])
+        fsbutton0 = QPushButton(f"1 {self.urlnames[0]}")
         fsbutton0.setStyleSheet("""
             QPushButton {
                 color: white;
@@ -219,7 +238,7 @@ class WebGrid(QWidget):
             browser.loadFinished.connect(lambda success, b=browser: self.handle_load_finished(b, success))        
             browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-            button = QPushButton(self.urlnames[i])
+            button = QPushButton(f"{i+1} {self.urlnames[i]}")
             button.setStyleSheet("""
                 QPushButton {
                     color: white;
@@ -264,6 +283,7 @@ class WebGrid(QWidget):
 
     def show_fullscreen(self, index):
         # Clear fullscreen layout
+        self.mode = Mode.CAMERA_FULLSCREEN
         while self.fullscreen_layout.count():
             child = self.fullscreen_layout.takeAt(0)
             if child.widget():
@@ -275,18 +295,26 @@ class WebGrid(QWidget):
         back_button = QPushButton(f"Back to All Cameras")
         back_button.setFocusPolicy(Qt.StrongFocus)
         back_button.setStyleSheet("color: white; font-size: 28px; padding: 10px;")
-        back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
+        back_button.clicked.connect(lambda: self.showCameras())
 
         self.fullscreen_layout.addWidget(back_button)
         self.fullscreen_layout.addWidget(browser)
 
         self.stack.setCurrentWidget(self.fullscreen_widget)
+        back_button.setFocus()
+
+    def showCameras(self):
+        self.mode = Mode.CAMERA
+        self.stack.setCurrentWidget(self.grid_widget)
+        self.viewer_btn.setFocus()
+
 
     def launch_image_viewer(self):
         self.timer.stop()
         self.clear_fullscreen()
         self.mode = Mode.PHOTO_FOLDER
         self.show_slideshow_or_subfolders(SOURCE_DIR)
+
 
     def show_images(self, folder_path, images):
         self.slideshow_index = 0
@@ -339,7 +367,7 @@ class WebGrid(QWidget):
                         background-color: #222;
                     }
                 """)
-                back_button.clicked.connect(lambda: self.stack.setCurrentWidget(self.grid_widget))
+                back_button.clicked.connect(lambda: showCameras())
                 breadcrumb_layout.addWidget(back_button)
                 row_buttons.append(back_button)
 
@@ -472,7 +500,7 @@ class WebGrid(QWidget):
         self.mode = Mode.PHOTO_FOLDER
         if not self.breadcrumbs or self.breadcrumbs == ['.']:
             # Already at top level - back to cameras
-            self.stack.setCurrentWidget(self.grid_widget)
+            self.showCameras()
         else:
             # Remove last breadcrumb and rebuild path
             self.breadcrumbs.pop()

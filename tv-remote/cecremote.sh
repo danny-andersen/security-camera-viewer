@@ -94,22 +94,23 @@ do
             strlastkey=$strkey
             case "$strkey" in
                 "1")
-                    xdotool key "BackSpace"
+                    xdotool key "1"
                     ;;
                 "2")
-                    keychar "abc2" intkeychar
+                    xdotool key "2"
                     ;;
                 "3")
-                    keychar "def3" intkeychar
+                    xdotool key "3"
                     ;;
                 "4")
-                    keychar "ghi4" intkeychar
+                    xdotool key "4"
                     ;;
                 "5")
-                    keychar "jkl5" intkeychar
+                    xdotool key "5"
                     ;;
                 "6")
-                    keychar "mno6" intkeychar
+                    xdotool key "6"
+
                     ;;
                 "7")
                     keychar "pqrs7" intkeychar
