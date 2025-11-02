@@ -171,7 +171,11 @@ class WebGrid(QWidget):
 
         # Screen 1 (left side)
         browser1 = QWebEngineView()
-        browser1.load(QUrl(self.urls[0]))
+        browser1.retry_count = 0
+        browser1.max_retries = 100
+        browser1.url_to_load = QUrl(self.urls[0])
+        browser1.load(browser1.url_to_load)
+        browser1.loadFinished.connect(lambda success, b=browser1: self.handle_load_finished(b, success))        
         browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
         fsbutton0 = QPushButton(self.urlnames[0])
@@ -208,7 +212,11 @@ class WebGrid(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
 
             browser = QWebEngineView()
-            browser.load(QUrl(self.urls[i]))
+            browser.retry_count = 0
+            browser.max_retries = 1000
+            browser.url_to_load = QUrl(self.urls[i])
+            browser.load(browser.url_to_load)
+            browser.loadFinished.connect(lambda success, b=browser: self.handle_load_finished(b, success))        
             browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
             button = QPushButton(self.urlnames[i])
@@ -241,7 +249,19 @@ class WebGrid(QWidget):
         outer_layout.addLayout(main_layout)
         self.grid_widget.setLayout(outer_layout)     
         self.viewer_btn.setFocus()   
-              
+    
+    def handle_load_finished(self, browser, success):
+        if success:
+            browser.retry_count = 0  # Reset on success
+        else:
+            if browser.retry_count < browser.max_retries:
+                browser.retry_count += 1
+                print(f"Retrying {browser.url_to_load.toString()} (attempt {browser.retry_count})")
+                QTimer.singleShot(10000, lambda: browser.load(browser.url_to_load))  # Retry after 1s
+            else:
+                print(f"Failed to load {browser.url_to_load.toString()} after {browser.max_retries} attempts")
+                # Optional: show error page or placeholder
+
     def show_fullscreen(self, index):
         # Clear fullscreen layout
         while self.fullscreen_layout.count():
@@ -366,8 +386,15 @@ class WebGrid(QWidget):
 
                 layout.addWidget(breadcrumb_bar)
 
+            # Add row of buttons to list of navigable grid buttons
+            self.folder_buttons.append(row_buttons)
+
+            # Grid for folder buttons
+            grid = QGridLayout()
+            grid.setSpacing(15)
+            count = 0
             if images:
-                photo_btn = QPushButton(f"Photos in this folder ({len(images)})")
+                photo_btn = QPushButton(f"Show photos in this folder ({len(images)})")
                 photo_btn.setFocusPolicy(Qt.StrongFocus)
                 photo_btn.setStyleSheet("""
                     QPushButton {
@@ -381,17 +408,16 @@ class WebGrid(QWidget):
                     }
                 """)
                 photo_btn.clicked.connect(lambda: self.show_images(folder_path, images))
-                layout.addWidget(photo_btn)
-                row_buttons.append(photo_btn)
-
-            # Add row of buttons to list of navigable grid buttons
-            self.folder_buttons.append(row_buttons)
-    
-            # Grid for folder buttons
-            grid = QGridLayout()
-            grid.setSpacing(15)
+                icon = self.icon_provider.icon(QFileIconProvider.File)
+                photo_btn.setIcon(icon)
+                photo_btn.setIconSize(QSize(32, 32))
+                photo_btn.setMinimumSize(120, 60)
+                #Add as first button in grid
+                grid.addWidget(photo_btn, 0, 0)
+                row_buttons = [photo_btn]
+                count = 1
+  
             cols = 3  # Number of columns in the grid
-                
             for i, sub in enumerate(sorted(subfolders)):
                 sub_path = os.path.join(folder_path, sub)
                 btn = QPushButton(sub)
@@ -412,7 +438,7 @@ class WebGrid(QWidget):
                 btn.setIcon(icon)
                 btn.setIconSize(QSize(32, 32))
                 btn.setMinimumSize(120, 60)                
-                row, col = divmod(i, cols)
+                row, col = divmod(i+count, cols)
                 if col == 0:
                     if row > 0:
                         self.folder_buttons.append(row_buttons)
@@ -441,7 +467,7 @@ class WebGrid(QWidget):
         self.stack.setCurrentWidget(self.fullscreen_widget)
             
     def go_up_one_folder(self):
-        print (f"backspace pressed {self.breadcrumbs}")
+        # print (f"backspace pressed {self.breadcrumbs}")
         self.timer.stop()
         self.mode = Mode.PHOTO_FOLDER
         if not self.breadcrumbs or self.breadcrumbs == ['.']:
@@ -484,8 +510,8 @@ class WebGrid(QWidget):
         layout.addWidget(label)
         
         # Navigation buttons in horizontal layout
-        button_row = QWidget()
-        button_layout = QHBoxLayout(button_row)
+        self.slideshow_controls = QWidget()
+        button_layout = QHBoxLayout(self.slideshow_controls)
         button_layout.setContentsMargins(0, 0, 0, 0)
         button_layout.setSpacing(20)
 
@@ -554,7 +580,7 @@ class WebGrid(QWidget):
         back_btn.clicked.connect(self.go_up_one_folder)
         button_layout.addWidget(back_btn)
 
-        layout.addWidget(button_row)
+        layout.addWidget(self.slideshow_controls)
 
         # Image display
         self.slideshow_label = QLabel()
@@ -566,6 +592,7 @@ class WebGrid(QWidget):
         self.fullscreen_layout.addWidget(container)
 
         self.show_image()
+        QTimer.singleShot(0, lambda: self.show_image()) # Refresh image after layout
         self.stack.setCurrentWidget(self.fullscreen_widget)
         self.play_pause_btn.setFocus()
 
@@ -580,21 +607,38 @@ class WebGrid(QWidget):
         path = self.slideshow_images[self.slideshow_index]
         pixmap = QPixmap(path)
 
-        # Use label dimensions directly to avoid zero-size issues
-        target_width = self.slideshow_label.width()
-        target_height = self.slideshow_label.height()
+        if self.mode == Mode.PLAY:
+            # Hide control buttons
+            self.slideshow_controls.hide()
 
-        if target_width > 0 and target_height > 0:
-            scaled = pixmap.scaled(
-                target_width,
-                target_height,
-                Qt.KeepAspectRatio,
-                Qt.SmoothTransformation
-            )
+            # Resize image to fullscreen
+            screen_size = QApplication.primaryScreen().size()
+            scaled = pixmap.scaled(screen_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.slideshow_label.setPixmap(scaled)
+            self.slideshow_label.setAlignment(Qt.AlignCenter)
         else:
-            # Fallback: show original pixmap until layout is ready
-            self.slideshow_label.setPixmap(pixmap)
+            # Show controls
+            self.slideshow_controls.show()
+
+            # Fit image to label size
+            scaled = pixmap.scaled(self.slideshow_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.slideshow_label.setPixmap(scaled)
+        
+        # # Use label dimensions directly to avoid zero-size issues
+        # target_width = self.slideshow_label.width()
+        # target_height = self.slideshow_label.height()
+
+        # if target_width > 0 and target_height > 0:
+        #     scaled = pixmap.scaled(
+        #         target_width,
+        #         target_height,
+        #         Qt.KeepAspectRatio,
+        #         Qt.SmoothTransformation
+        #     )
+        #     self.slideshow_label.setPixmap(scaled)
+        # else:
+        #     # Fallback: show original pixmap until layout is ready
+        #     self.slideshow_label.setPixmap(pixmap)
 
     def next_image(self):
         if self.mode == Mode.PLAY:
