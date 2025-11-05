@@ -8,7 +8,7 @@
 #define RELAY_OFF HIGH
 
 const unsigned long LOOP_DELAY = 1000; // 10 sec loop time
-const unsigned long BOOT_DELAY = 120000; // 2 mins boot up time
+const unsigned long BOOT_DELAY = 300000; // 5 mins boot up and settle time - minimum on period - will not enter a power off cycle until this has elapsed
 const unsigned long SHUTDOWN_DELAY = 120000; // 2 mins shutdown time
 
 
