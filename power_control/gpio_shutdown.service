@@ -3,7 +3,7 @@ Description=Shutdown Raspberry Pi on GPIO 17 LOW
 After=multi-user.target
 
 [Service]
-ExecStart=/usr/bin/python /home/danny/power_control/gpio_shutdown.py
+ExecStart=/usr/bin/python -u /home/danny/power_control/gpio_shutdown.py
 Restart=always
 User=root
 

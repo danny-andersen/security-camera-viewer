@@ -100,6 +100,7 @@ void loop() {
   }
   if (state == POWER_OFF_PI && newState == TV_OFF) {
     digitalWrite(RELAY_OUT, RELAY_OFF);
+    delay(5000); //Ensure PI is powercycled
     setLED(RED);
   }
   state = newState;
