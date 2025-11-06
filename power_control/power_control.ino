@@ -6,6 +6,8 @@
 #define BLUE_LED 8
 #define RELAY_ON LOW    //Relay is low level triggered
 #define RELAY_OFF HIGH
+#define TV_IS_ON LOW //When TV is on, this line is driven low
+#define TV_IS_OFF HIGH //When TV is off, this line is pulled high
 
 const unsigned long LOOP_DELAY = 1000; // 10 sec loop time
 const unsigned long BOOT_DELAY = 300000; // 5 mins boot up and settle time - minimum on period - will not enter a power off cycle until this has elapsed
@@ -36,6 +38,7 @@ int newState = state;
 
 void setup() {
   Serial.begin(38400);
+  pinMode(VSENSE_IN, INPUT_PULLUP);     
   pinMode(PICONTROL_OUT, OUTPUT);     
   pinMode(RED_LED, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
   pinMode(GREEN_LED, OUTPUT);     // Initialize the LED_BUILTIN pin as an output
@@ -56,32 +59,32 @@ void loop() {
   unsigned long delayTime = LOOP_DELAY;
   switch (state) {
     case(INIT):
-      if (tvState == HIGH) {
+      if (tvState == TV_IS_ON) {
         newState = POWER_ON_PI;
       } else {
         newState = TV_OFF;
       }
       break;
     case(POWER_ON_PI):
-      digitalWrite(PICONTROL_OUT, HIGH);
+      digitalWrite(PICONTROL_OUT, LOW);
       digitalWrite(RELAY_OUT, RELAY_ON);
       setLED(BLUE);
       newState = TV_ON;
       delayTime = BOOT_DELAY;
       break;
     case(TV_ON):
-      if (tvState == LOW) {
+      if (tvState == TV_IS_OFF) {
         newState = POWER_OFF_PI;
       }
       break;
     case(POWER_OFF_PI):
-      digitalWrite(PICONTROL_OUT, LOW);
+      digitalWrite(PICONTROL_OUT, HIGH);
       setLED(YELLOW);
       delayTime = SHUTDOWN_DELAY;
       newState = TV_OFF;
       break;
     case(TV_OFF):
-      if (tvState == HIGH) {
+      if (tvState == TV_IS_ON) {
         newState = POWER_ON_PI;
       }
       break;
