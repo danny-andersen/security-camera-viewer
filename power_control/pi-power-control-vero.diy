@@ -551,12 +551,12 @@
     <diylc.passive.Resistor>
       <name>R3</name>
       <alpha>127</alpha>
-      <length value="0.5" unit="in"/>
+      <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
-        <point x="8.5" y="2.5"/>
+        <point x="8.7" y="2.5"/>
         <point x="9.2" y="2.5"/>
-        <point x="8.85" y="2.5"/>
+        <point x="8.95" y="2.5"/>
       </points>
       <bodyColor hex="82cffd"/>
       <borderColor hex="5b90b1"/>
@@ -576,12 +576,12 @@
     <diylc.passive.Resistor>
       <name>R4</name>
       <alpha>127</alpha>
-      <length value="0.5" unit="in"/>
+      <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
-        <point x="8.5" y="2.6"/>
+        <point x="8.7" y="2.6"/>
         <point x="9.2" y="2.6"/>
-        <point x="8.85" y="2.6"/>
+        <point x="8.95" y="2.6"/>
       </points>
       <bodyColor hex="82cffd"/>
       <borderColor hex="5b90b1"/>
@@ -601,12 +601,12 @@
     <diylc.passive.Resistor>
       <name>R5</name>
       <alpha>127</alpha>
-      <length value="0.5" unit="in"/>
+      <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
-        <point x="8.5" y="2.7"/>
+        <point x="8.7" y="2.7"/>
         <point x="9.2" y="2.7"/>
-        <point x="8.85" y="2.7"/>
+        <point x="8.95" y="2.7"/>
       </points>
       <bodyColor hex="82cffd"/>
       <borderColor hex="5b90b1"/>
@@ -617,7 +617,7 @@
       <labelOriantation>Directional</labelOriantation>
       <moveLabel>false</moveLabel>
       <hideShortLeads>false</hideShortLeads>
-      <value value="5100.0" unit="R"/>
+      <value value="2000.0" unit="R"/>
       <power>HALF</power>
       <powerNew value="0.25" unit="W"/>
       <colorCode>_5_BAND</colorCode>
@@ -626,7 +626,7 @@
     <diylc.passive.Resistor>
       <name>R2</name>
       <alpha>127</alpha>
-      <length value="0.5" unit="in"/>
+      <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
         <point x="8.7" y="2.9"/>
@@ -653,10 +653,10 @@
       <alpha>127</alpha>
       <orientation>DEFAULT</orientation>
       <controlPoints>
-        <point x="9.4" y="2.5"/>
-        <point x="9.4" y="2.6"/>
-        <point x="9.4" y="2.7"/>
-        <point x="9.4" y="2.8"/>
+        <point x="9.3" y="2.5"/>
+        <point x="9.3" y="2.6"/>
+        <point x="9.3" y="2.7"/>
+        <point x="9.3" y="2.8"/>
       </controlPoints>
       <rowCount>1</rowCount>
       <columnCount>4</columnCount>
@@ -689,12 +689,12 @@
     <diylc.passive.Resistor>
       <name>R1</name>
       <alpha>127</alpha>
-      <length value="0.5" unit="in"/>
+      <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
-        <point x="9.2" y="4.1"/>
+        <point x="9.299999999999999" y="4.1"/>
         <point x="9.0" y="4.1"/>
-        <point x="9.1" y="4.1"/>
+        <point x="9.15" y="4.1"/>
       </points>
       <bodyColor hex="82cffd"/>
       <borderColor hex="5b90b1"/>
@@ -733,9 +733,12 @@
       <controlPoints>
         <point x="9.4" y="3.7"/>
         <point x="9.4" y="3.8"/>
+        <point x="9.4" y="3.9"/>
+        <point x="9.4" y="4.0"/>
+        <point x="9.4" y="4.1"/>
       </controlPoints>
       <rowCount>1</rowCount>
-      <columnCount>2</columnCount>
+      <columnCount>5</columnCount>
       <spacing value="0.1" unit="in"/>
       <shrouded>false</shrouded>
       <bodyColor hex="808080"/>
