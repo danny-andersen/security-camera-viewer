@@ -287,9 +287,9 @@
       <name>J6</name>
       <alpha>127</alpha>
       <points>
-        <point x="7.7" y="4.3"/>
+        <point x="7.7" y="4.4"/>
         <point x="7.7" y="3.2"/>
-        <point x="7.7" y="3.75"/>
+        <point x="7.7" y="3.8"/>
       </points>
       <bodyColor hex="ffffff"/>
       <borderColor hex="000000"/>
@@ -529,7 +529,7 @@
     </diylc.semiconductors.DIL__IC>
     <diylc.semiconductors.DIL__IC>
       <name>U7</name>
-      <alpha>127</alpha>
+      <alpha>102</alpha>
       <value>PC817</value>
       <orientation>DEFAULT</orientation>
       <pinCount>_4</pinCount>
@@ -667,7 +667,7 @@
     </diylc.electromechanical.PinHeader>
     <diylc.semiconductors.DIL__IC>
       <name>U6</name>
-      <alpha>127</alpha>
+      <alpha>99</alpha>
       <value>PC817</value>
       <orientation>_180</orientation>
       <pinCount>_4</pinCount>
@@ -688,7 +688,7 @@
     </diylc.semiconductors.DIL__IC>
     <diylc.passive.Resistor>
       <name>R1</name>
-      <alpha>127</alpha>
+      <alpha>102</alpha>
       <length value="7.0" unit="mm"/>
       <width value="0.125" unit="in"/>
       <points>
@@ -739,6 +739,36 @@
       </controlPoints>
       <rowCount>1</rowCount>
       <columnCount>5</columnCount>
+      <spacing value="0.1" unit="in"/>
+      <shrouded>false</shrouded>
+      <bodyColor hex="808080"/>
+      <shroudColor hex="595959"/>
+    </diylc.electromechanical.PinHeader>
+    <diylc.electromechanical.PinHeader>
+      <name>PH4</name>
+      <alpha>127</alpha>
+      <orientation>DEFAULT</orientation>
+      <controlPoints>
+        <point x="9.2" y="3.6"/>
+        <point x="9.3" y="3.6"/>
+      </controlPoints>
+      <rowCount>2</rowCount>
+      <columnCount>1</columnCount>
+      <spacing value="0.1" unit="in"/>
+      <shrouded>false</shrouded>
+      <bodyColor hex="808080"/>
+      <shroudColor hex="595959"/>
+    </diylc.electromechanical.PinHeader>
+    <diylc.electromechanical.PinHeader>
+      <name>PH5</name>
+      <alpha>127</alpha>
+      <orientation>DEFAULT</orientation>
+      <controlPoints>
+        <point x="9.2" y="4.4"/>
+        <point x="9.3" y="4.4"/>
+      </controlPoints>
+      <rowCount>2</rowCount>
+      <columnCount>1</columnCount>
       <spacing value="0.1" unit="in"/>
       <shrouded>false</shrouded>
       <bodyColor hex="808080"/>
@@ -796,7 +826,7 @@
     </diylc.misc.Label>
     <diylc.misc.Label>
       <name>LAB8</name>
-      <point x="9.6" y="4.3"/>
+      <point x="9.6" y="4.4"/>
       <text>+5V</text>
       <font name="Dialog.plain" size="14" style="0"/>
       <color hex="000000"/>
