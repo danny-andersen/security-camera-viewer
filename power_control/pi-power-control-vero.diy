@@ -648,23 +648,6 @@
       <colorCode>_5_BAND</colorCode>
       <shape>Standard</shape>
     </diylc.passive.Resistor>
-    <diylc.electromechanical.PinHeader>
-      <name>PH1</name>
-      <alpha>127</alpha>
-      <orientation>DEFAULT</orientation>
-      <controlPoints>
-        <point x="9.3" y="2.5"/>
-        <point x="9.3" y="2.6"/>
-        <point x="9.3" y="2.7"/>
-        <point x="9.3" y="2.8"/>
-      </controlPoints>
-      <rowCount>1</rowCount>
-      <columnCount>4</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>false</shrouded>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
     <diylc.semiconductors.DIL__IC>
       <name>U6</name>
       <alpha>99</alpha>
@@ -711,69 +694,6 @@
       <colorCode>_5_BAND</colorCode>
       <shape>Standard</shape>
     </diylc.passive.Resistor>
-    <diylc.electromechanical.PinHeader>
-      <name>PH2</name>
-      <alpha>127</alpha>
-      <orientation>DEFAULT</orientation>
-      <controlPoints>
-        <point x="9.4" y="4.0"/>
-        <point x="9.4" y="4.1"/>
-      </controlPoints>
-      <rowCount>1</rowCount>
-      <columnCount>2</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>false</shrouded>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
-    <diylc.electromechanical.PinHeader>
-      <name>PH3</name>
-      <alpha>127</alpha>
-      <orientation>DEFAULT</orientation>
-      <controlPoints>
-        <point x="9.4" y="3.7"/>
-        <point x="9.4" y="3.8"/>
-        <point x="9.4" y="3.9"/>
-        <point x="9.4" y="4.0"/>
-        <point x="9.4" y="4.1"/>
-      </controlPoints>
-      <rowCount>1</rowCount>
-      <columnCount>5</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>false</shrouded>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
-    <diylc.electromechanical.PinHeader>
-      <name>PH4</name>
-      <alpha>127</alpha>
-      <orientation>DEFAULT</orientation>
-      <controlPoints>
-        <point x="9.2" y="3.6"/>
-        <point x="9.3" y="3.6"/>
-      </controlPoints>
-      <rowCount>2</rowCount>
-      <columnCount>1</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>false</shrouded>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
-    <diylc.electromechanical.PinHeader>
-      <name>PH5</name>
-      <alpha>127</alpha>
-      <orientation>DEFAULT</orientation>
-      <controlPoints>
-        <point x="9.2" y="4.4"/>
-        <point x="9.3" y="4.4"/>
-      </controlPoints>
-      <rowCount>2</rowCount>
-      <columnCount>1</columnCount>
-      <spacing value="0.1" unit="in"/>
-      <shrouded>false</shrouded>
-      <bodyColor hex="808080"/>
-      <shroudColor hex="595959"/>
-    </diylc.electromechanical.PinHeader>
     <diylc.misc.Label>
       <name>LAB1</name>
       <point x="9.7" y="2.5"/>
