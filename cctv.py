@@ -6,6 +6,8 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QGridLayout, QVBoxLayout, QScrollArea, QHBoxLayout, QPushButton, QLabel, QSizePolicy, QStackedLayout, QFileIconProvider
 )
 from PyQt5.QtWebEngineWidgets import QWebEngineView
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtMultimediaWidgets import QVideoWidget
 from PyQt5.QtCore import QUrl, Qt, QTimer, QEvent, QPoint, QSize
 from enum import Enum, auto
 
@@ -19,6 +21,35 @@ class Mode(Enum):
     SLIDESHOW = auto()
     PLAY = auto()
     
+    
+from PyQt5.QtWidgets import QApplication, QGraphicsScene, QGraphicsView
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+from PyQt5.QtMultimediaWidgets import QGraphicsVideoItem
+from PyQt5.QtCore import QUrl, QTimer, QSizeF
+
+class VideoView(QGraphicsView):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+        self.video_item = QGraphicsVideoItem()
+        self.scene.addItem(self.video_item)
+
+        # Initial size
+        self.video_item.setSize(QSizeF(self.viewport().size()))
+
+        # Styling
+        self.setStyleSheet("background-color: black;")
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setFrameShape(QGraphicsView.NoFrame)
+
+    def resizeEvent(self, event):
+        # Resize video item to fill viewport
+        self.video_item.setSize(QSizeF(self.viewport().size()))
+        super().resizeEvent(event)
+        
 class WebGrid(QWidget):
     def __init__(self):
         super().__init__()
@@ -84,17 +115,17 @@ class WebGrid(QWidget):
         
         if self.mode == Mode.CAMERA:
             if key == Qt.Key_1:
-                self.show_fullscreen(0)
+                self.show_fullscreen(self.urls[0])
             elif key == Qt.Key_2:
-                self.show_fullscreen(1)
+                self.show_fullscreen(self.urls[1])
             elif key == Qt.Key_3:
-                self.show_fullscreen(2)
+                self.show_fullscreen(self.urls[2])
             elif key == Qt.Key_4:
-                self.show_fullscreen(3)
+                self.show_fullscreen(self.urls[3])
             elif key == Qt.Key_5:
-                self.show_fullscreen(4)
+                self.show_fullscreen(self.urls[4])
 
-        print(f"Key pressed: {key}, Focus widget: {type(focus_widget)}, Mode: {self.mode}")
+        # print(f"Key pressed: {key}, Focus widget: {type(focus_widget)}, Mode: {self.mode}")
         if key in (Qt.Key_Right, Qt.Key_Down, Qt.Key_L, Qt.Key_J):
             if self.mode == Mode.PLAY:
                 # Next image in PLAY mode
@@ -176,7 +207,13 @@ class WebGrid(QWidget):
         self.viewer_btn.clicked.connect(self.launch_image_viewer)
         self.viewer_btn.setFocusPolicy(Qt.StrongFocus)
         top_layout.addWidget(self.viewer_btn)
-        
+
+        self.open_webcam_btn = QPushButton("Winsford Flash Webcam")
+        self.open_webcam_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
+        self.open_webcam_btn.setFocusPolicy(Qt.StrongFocus)
+        self.open_webcam_btn.clicked.connect(lambda event, u="https://camsecure.uk/HLS/rhough.m3u8": self.show_fullscreen(u, video_mode=True))
+
+        top_layout.addWidget(self.open_webcam_btn)        
         outer_layout.addWidget(top_row)
 
         # Main horizontal layout: left + right
@@ -212,7 +249,7 @@ class WebGrid(QWidget):
         fsbutton0.setCursor(Qt.PointingHandCursor)
         fsbutton0.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
         fsbutton0.setFocusPolicy(Qt.StrongFocus)
-        fsbutton0.clicked.connect(lambda event, u=0: self.show_fullscreen(u))
+        fsbutton0.clicked.connect(lambda event, u=self.urls[0]: self.show_fullscreen(u))
         # fsbutton0.mousePressEvent = lambda event, u=self.urls[0]: self.show_fullscreen(u)
         # fsbutton0.setAttribute(Qt.WA_TransparentForMouseEvents, False)  # Optional: allows mouse + keyboard
 
@@ -254,7 +291,7 @@ class WebGrid(QWidget):
             button.setFocusPolicy(Qt.StrongFocus)
             button.setMinimumHeight(40)
             button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-            button.clicked.connect(lambda event, u=i: self.show_fullscreen(u))
+            button.clicked.connect(lambda event, u=self.urls[i]: self.show_fullscreen(u))
 
             layout.addWidget(browser)
             layout.addWidget(button)
@@ -281,7 +318,7 @@ class WebGrid(QWidget):
                 print(f"Failed to load {browser.url_to_load.toString()} after {browser.max_retries} attempts")
                 # Optional: show error page or placeholder
 
-    def show_fullscreen(self, index):
+    def show_fullscreen(self, url, video_mode=False):
         # Clear fullscreen layout
         self.mode = Mode.CAMERA_FULLSCREEN
         while self.fullscreen_layout.count():
@@ -289,8 +326,6 @@ class WebGrid(QWidget):
             if child.widget():
                 child.widget().deleteLater()
 
-        browser = QWebEngineView()
-        browser.load(QUrl(self.urls[index]))
 
         back_button = QPushButton(f"Back to All Cameras")
         back_button.setFocusPolicy(Qt.StrongFocus)
@@ -298,11 +333,45 @@ class WebGrid(QWidget):
         back_button.clicked.connect(lambda: self.showCameras())
 
         self.fullscreen_layout.addWidget(back_button)
-        self.fullscreen_layout.addWidget(browser)
 
-        self.stack.setCurrentWidget(self.fullscreen_widget)
+        if not video_mode:
+            browser = QWebEngineView()
+            browser.load(QUrl(url))
+            self.fullscreen_layout.addWidget(browser)
+            self.stack.setCurrentWidget(self.fullscreen_widget)
+        else:
+            self.view = VideoView(self.fullscreen_widget)
+            self.fullscreen_layout.addWidget(self.view)
+
+            self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
+            self.player.setVideoOutput(self.view.video_item)
+            self.player.setMedia(QMediaContent(QUrl(url)))
+            self.fullscreen_layout.addWidget(self.view)
+
+            # Debug signals
+            self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
+            self.player.stateChanged.connect(lambda s: print("Player state:", s))
+            self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
+
+            QTimer.singleShot(500, self.player.play)
+            self.stack.setCurrentWidget(self.fullscreen_widget)
+
         back_button.setFocus()
 
+    def resizeEvent(self, event):
+        # Ensure video item fills the graphics view’s viewport
+        if hasattr(self, "video_item") and hasattr(self, "view"):
+            print("Resizing video item to fill viewport")
+            viewport_size = self.view.viewport().size()
+            self.video_item.setSize(QSizeF(viewport_size))
+        super().resizeEvent(event)
+    
+    def handle_player_error(self, error):
+        print("Playback error:", self.player.errorString())
+        if self.player.error() != QMediaPlayer.NoError:
+            # Retry logic
+            QTimer.singleShot(2000, lambda: self.player.play())
+        
     def showCameras(self):
         self.mode = Mode.CAMERA
         self.stack.setCurrentWidget(self.grid_widget)
@@ -367,7 +436,7 @@ class WebGrid(QWidget):
                         background-color: #222;
                     }
                 """)
-                back_button.clicked.connect(lambda: showCameras())
+                back_button.clicked.connect(lambda: self.showCameras())
                 breadcrumb_layout.addWidget(back_button)
                 row_buttons.append(back_button)
 
