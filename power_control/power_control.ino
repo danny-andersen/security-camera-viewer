@@ -74,7 +74,13 @@ void loop() {
       break;
     case(TV_ON):
       if (tvState == TV_IS_OFF) {
-        newState = POWER_OFF_PI;
+        delay(30000); //Wait for 30 seconds 
+        // Re-read the sense input. If TV is still off then signal PI to shutdown
+        //This provides a time deadband on the sense input
+        tvState = digitalRead(VSENSE_IN);
+        if (tvState == TV_IS_OFF) {
+          newState = POWER_OFF_PI;
+        }
       }
       break;
     case(POWER_OFF_PI):
