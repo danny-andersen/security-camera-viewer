@@ -1,18 +1,30 @@
 import sys
 import os
+import tempfile
+import datetime
+from pathlib import Path
 
 from PyQt5.QtGui import QPixmap, QKeyEvent, QMouseEvent
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QGridLayout, QVBoxLayout, QScrollArea, QHBoxLayout, QPushButton, QLabel, QSizePolicy, QStackedLayout, QFileIconProvider
+    QApplication, QWidget, QGridLayout, QVBoxLayout, QScrollArea, QHBoxLayout, QPushButton, QLabel, QSizePolicy, QStackedLayout, QFileIconProvider, QToolButton, QListWidget, QListWidgetItem, QMessageBox, QSlider, QStyle
 )
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
 from PyQt5.QtMultimediaWidgets import QVideoWidget
-from PyQt5.QtCore import QUrl, Qt, QTimer, QEvent, QPoint, QSize
+from PyQt5.QtCore import QUrl, Qt, QTimer, QEvent, QPoint, QSize, QThread, pyqtSignal, pyqtSlot, QSizeF
+
+from PyQt5.QtGui import QIcon
+
 from enum import Enum, auto
+
+import dropbox
+from dropbox.files import FileMetadata, FolderMetadata
 
 SOURCE_DIR = "/home/danny/Dropbox/Photos/Bigbertha_backup/"
 IMAGE_TIMER = 3000  # 3 seconds
+
+DROPBOX_ACCESS_TOKEN = os.environ.get("DROPBOX_ACCESS_TOKEN", "PASTE_YOUR_TOKEN_HERE")
+DROPBOX_ROOT_PATH = "/motion_images"  
 
 class Mode(Enum):
     CAMERA = auto()
@@ -20,6 +32,8 @@ class Mode(Enum):
     PHOTO_FOLDER = auto()
     SLIDESHOW = auto()
     PLAY = auto()
+    SECURITY_CAMERA_FOLDER = auto()
+    SECURITY_VIDEO = auto()
     
     
 from PyQt5.QtWidgets import QApplication, QGraphicsScene, QGraphicsView
@@ -50,6 +64,550 @@ class VideoView(QGraphicsView):
         self.video_item.setSize(QSizeF(self.viewport().size()))
         super().resizeEvent(event)
         
+
+class VideoPlayerWidget(QWidget):
+    def __init__(self, player, parent=None):
+        super().__init__(parent)
+
+        self.view = VideoView()
+        self.player = player
+
+        # --- Controls ---
+        self.playButton = QPushButton("Play")
+        self.playButton.setFixedHeight(60)   # ensure visible size
+        self.playButton.setFocusPolicy(Qt.StrongFocus)
+        self.playButton.setMinimumWidth(240)
+        self.playButton.clicked.connect(self.togglePlay)
+        self.playButton.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+
+        self.positionSlider = QSlider(Qt.Horizontal)
+        self.positionSlider.setRange(0, 0)
+        self.positionSlider.setFixedHeight(60)
+        self.positionSlider.sliderMoved.connect(self.setPosition)
+        
+        # Layout for controls
+        controlLayout = QHBoxLayout()
+        controlLayout.addWidget(self.playButton)
+        controlLayout.addWidget(self.positionSlider)
+
+        # Main layout
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.view)
+        layout.addLayout(controlLayout)
+
+        # Connect signals
+        self.player.stateChanged.connect(self.updatePlayButton)
+        self.player.positionChanged.connect(self.updatePosition)
+        self.player.durationChanged.connect(self.updateDuration)
+        self.player.mediaStatusChanged.connect(self.handleMediaStatus)
+
+    def handleMediaStatus(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            # Reset pipeline immediately
+            current_media = self.player.media()
+            self.player.setMedia(current_media)
+            self.player.setPosition(0)
+                
+    def togglePlay(self):
+        if self.player.state() == QMediaPlayer.PlayingState:
+            self.player.pause()
+        else:
+            # If at end, reload media before playing
+            if self.player.mediaStatus() == QMediaPlayer.EndOfMedia:
+                current_media = self.player.media()
+                self.player.setMedia(current_media)   # reload
+                self.player.setPosition(0)
+            self.player.play()
+        
+    def updatePlayButton(self, state):
+        if state == QMediaPlayer.PlayingState:
+            self.playButton.setText("Pause")
+        else:
+            self.playButton.setText("Play")
+
+    def updatePosition(self, position):
+        self.positionSlider.setValue(position)
+
+    def updateDuration(self, duration):
+        self.positionSlider.setRange(0, duration)
+
+    def setPosition(self, position):
+        self.player.setPosition(position)
+        
+# ---------- Dropbox worker threads ----------
+class DropboxListWorker(QThread):
+    """Lists folders or files in a Dropbox path."""
+    listed = pyqtSignal(str, list, str)  # path, entries, error
+
+    def __init__(self, dbx, path, list_folders_only=False, parent=None):
+        super().__init__(parent)
+        self.dbx = dbx
+        self.path = path
+        self.list_folders_only = list_folders_only
+
+    def run(self):
+        try:
+            res = self.dbx.files_list_folder(self.path)
+            entries = []
+            for e in res.entries:
+                if isinstance(e, FolderMetadata):
+                    entries.append(("folder", e.name, e.path_lower))
+                elif isinstance(e, FileMetadata):
+                    if self.list_folders_only:
+                        continue
+                    entries.append(("file", e.name, e.path_lower))
+            self.listed.emit(self.path, entries, "")
+        except Exception as e:
+            self.listed.emit(self.path, [], str(e))
+
+
+class DropboxDownloadWorker(QThread):
+    """Downloads a Dropbox file to a local temp path."""
+    downloaded = pyqtSignal(str, str, str)  # dropbox_path, local_path, error
+
+    def __init__(self, dbx, dropbox_path, target_dir=None, parent=None):
+        super().__init__(parent)
+        self.dbx = dbx
+        self.dropbox_path = dropbox_path
+        self.target_dir = target_dir or tempfile.gettempdir()
+
+    def run(self):
+        try:
+            # Derive a safe local filename
+            name = Path(self.dropbox_path).name
+            local_path = os.path.join(self.target_dir, name)
+            # Ensure uniqueness
+            base = local_path
+            i = 1
+            while os.path.exists(local_path):
+                stem = Path(base).stem
+                suffix = Path(base).suffix
+                local_path = os.path.join(self.target_dir, f"{stem}_{i}{suffix}")
+                i += 1
+
+            with open(local_path, "wb") as f:
+                self.dbx.files_download_to_file(f.name, self.dropbox_path)
+            self.downloaded.emit(self.dropbox_path, local_path, "")
+        except Exception as e:
+            self.downloaded.emit(self.dropbox_path, "", str(e))
+
+# ---------- UI components ----------
+
+class DropboxFolderGridView(QWidget):
+    """Grid of folder icons; emits a signal when a folder is clicked."""
+    folderClicked = pyqtSignal(str)  # path_lower
+
+    def __init__(self, owning_widget, top_row_buttons, parent=None):
+        super().__init__(parent)
+        self.owning_widget = owning_widget
+        self.top_row_buttons = top_row_buttons
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.owning_widget.folder_scroll_area = self.scroll
+        self.container = QWidget()
+        self.grid = QGridLayout(self.container)
+        self.grid.setSpacing(16)
+        self.grid.setContentsMargins(16, 16, 16, 16)
+        self.scroll.setWidget(self.container)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.scroll)
+
+        # Icon for folders using system icon provider
+        self.icon_provider = QFileIconProvider()
+        self.folder_icon = self.icon_provider.icon(QFileIconProvider.Folder)
+
+    def parse_date_from_folder(self, name: str):
+        """Extract datetime from folder name like YYYY-MM-DD"""
+        try:
+            return datetime.datetime.strptime(name, "%Y-%m-%d")
+        except Exception:
+            return datetime.datetime.min  # fallback if parsing fails
+    
+    def setFolders(self, folders):
+        # folders: list of tuples (name, path_lower)
+        # Sort descending by date (most recent first)
+        folders_sorted = sorted(folders, key=lambda f: self.parse_date_from_folder(f[0]), reverse=True)        
+
+        # Clear grid
+        for i in reversed(range(self.grid.count())):
+            w = self.grid.itemAt(i).widget()
+            if w:
+                w.setParent(None)
+
+        self.owning_widget.folder_buttons = [self.top_row_buttons]
+        
+        # Populate grid
+        cols = 4
+        row, col = 0, 0
+        row_buttons = []
+        for name, path in folders_sorted:
+            btn = QToolButton()
+            btn.setIcon(self.folder_icon)
+            btn.setIconSize(QSize(64, 64))
+            btn.setText(name)
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            # Apply white text + 28px font
+            btn.setStyleSheet("""
+                QToolButton {
+                    color: white;
+                    font-size: 28px;
+                }
+                QToolButton:focus {
+                    border: 2px solid #00ffff;
+                    background-color: #222;
+                }
+            """)
+            btn.setMinimumSize(120, 120)
+            btn.clicked.connect(lambda checked=False, p=path: self.folderClicked.emit(p))
+
+            self.grid.addWidget(btn, row, col)
+            row_buttons.append(btn)
+            col += 1
+            if col >= cols:
+                self.owning_widget.folder_buttons.append(row_buttons)
+                row_buttons = []
+                col = 0
+                row += 1
+
+        if row_buttons:
+            self.owning_widget.folder_buttons.append(row_buttons)
+
+
+class DropboxFileGridView(QWidget):
+    """Grid of files with icons. Video files show parsed date/time labels."""
+    fileClicked = pyqtSignal(str)
+
+    def __init__(self, owning_widget, top_row_buttons, parent=None):
+        super().__init__(parent)
+        self.owning_widget = owning_widget
+        self.top_row_buttons = top_row_buttons
+        self.scroll = QScrollArea(self)
+        self.scroll.setWidgetResizable(True)
+        self.container = QWidget()
+        self.grid = QGridLayout(self.container)
+        self.grid.setSpacing(16)
+        self.grid.setContentsMargins(16, 16, 16, 16)
+        self.scroll.setWidget(self.container)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.scroll)
+
+        self.icon_provider = QFileIconProvider()
+        self.file_icon = self.icon_provider.icon(QFileIconProvider.File)
+        self.video_icon = QIcon.fromTheme("video-x-generic") or self.file_icon
+        self.doc_icon = QIcon.fromTheme("text-x-generic") or self.file_icon
+
+    def parse_datetime_from_name(self, name: str):
+        """Extract datetime from filename like YYYYMMDD'T'HHMISS-cameraname.ext"""
+        try:
+            stem = Path(name).stem
+            datepart = stem.split("-", 1)[0]
+            return datetime.datetime.strptime(datepart, "%Y%m%dT%H%M%S")
+        except Exception:
+            return datetime.datetime.min  # fallback for non-matching names
+
+    def setFiles(self, files):
+        files_sorted = sorted(files, key=lambda f: self.parse_datetime_from_name(f[0]), reverse=True)        
+        # Clear grid
+        for i in reversed(range(self.grid.count())):
+            w = self.grid.itemAt(i).widget()
+            if w:
+                w.setParent(None)
+
+        self.owning_widget.folder_buttons = [self.top_row_buttons]
+
+        # Populate grid
+        cols = 4
+        row, col = 0, 0
+        row_buttons = []
+        for name, path in files_sorted:
+            ext = Path(name).suffix.lower()
+
+            # Decide icon + label
+            if ext in (".mp4", ".mpeg", ".mpg", ".m4v"):
+                icon = self.video_icon
+                label_text = name
+                try:
+                    stem = Path(name).stem
+                    # Split into datepart and camera name
+                    datepart, cameraname = stem.split("-", 1)
+                    dt = datetime.datetime.strptime(datepart, "%Y%m%dT%H%M%S")
+                    # label_text = f"{cameraname} at {dt.strftime('%d %b %Y, %H:%M:%S')}"
+                    label_text = f"{cameraname} at {dt.strftime('%H:%M:%S')}"
+                except Exception:
+                    pass
+            elif ext in (".txt", ".md", ".pdf", ".doc", ".docx"):
+                icon = self.doc_icon
+                label_text = name
+            else:
+                icon = self.file_icon
+                label_text = name
+
+            # Create button
+            btn = QToolButton()
+            btn.setIcon(icon)
+            btn.setIconSize(QSize(64, 64))
+            btn.setText(label_text)
+            btn.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
+            btn.setMinimumSize(160, 140)
+            btn.setStyleSheet("""
+                QToolButton {
+                    color: white;
+                    font-size: 28px;
+                }
+            """)
+            btn.clicked.connect(lambda checked=False, p=path: self.fileClicked.emit(p))
+
+            self.grid.addWidget(btn, row, col)
+            row_buttons.append(btn)
+            col += 1
+            if col >= cols:
+                self.owning_widget.folder_buttons.append(row_buttons)
+                row_buttons = []
+                col = 0
+                row += 1
+        if row_buttons:
+            self.owning_widget.folder_buttons.append(row_buttons)
+
+    def onActivated(self, item):
+        path = item.data(Qt.UserRole)
+        if path:
+            self.fileClicked.emit(path)
+
+class SecurityVideoWindow(QWidget):
+    def __init__(self, owning_widget, parent=None):
+        super().__init__(parent)
+
+        self.owning_widget = owning_widget
+        self.owning_widget.folder_buttons = []
+        
+        self.parent_layout = owning_widget.fullscreen_layout
+
+
+        dropbox_token = self.read_dropbox_token()
+        self.dbx = dropbox.Dropbox(dropbox_token)
+        owning_widget.mode = Mode.SECURITY_CAMERA_FOLDER
+
+        self.top_row_buttons = []
+        # Breadcrumb bar
+        breadcrumb_bar = QWidget()
+        breadcrumb_layout = QHBoxLayout(breadcrumb_bar)
+        breadcrumb_layout.setContentsMargins(0, 0, 0, 0)
+        breadcrumb_layout.setSpacing(10)
+        
+        camera_button = QPushButton("Back to All Cameras")
+        camera_button.setFocusPolicy(Qt.StrongFocus)
+        camera_button.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+        camera_button.clicked.connect(lambda: self.owning_widget.showCameras())
+        self.top_row_buttons.append(camera_button)
+        breadcrumb_layout.addWidget(camera_button)
+
+        back_button = QPushButton("Back to Previous Folder")
+        back_button.setFocusPolicy(Qt.StrongFocus)
+        back_button.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+        back_button.clicked.connect(lambda: self.onBack())
+        breadcrumb_layout.addWidget(back_button)
+        self.top_row_buttons.append(back_button)
+        
+        self.parent_layout.addWidget(breadcrumb_bar)
+        self.owning_widget.folder_buttons.append(self.top_row_buttons)
+        
+        self.folderView = DropboxFolderGridView(self.owning_widget, self.top_row_buttons)
+        self.fileView = DropboxFileGridView(self.owning_widget, self.top_row_buttons)
+        self.stack = QStackedLayout()
+
+        self.parent_layout.addLayout(self.stack)
+
+        self.stack.addWidget(self.folderView)  # index 0
+        self.stack.addWidget(self.fileView)    # index 1
+        self.stack.addWidget(self.owning_widget.playerview) # index 2
+
+        # Connections
+        self.folderView.folderClicked.connect(self.openFolder)
+        self.fileView.fileClicked.connect(self.openFile)
+
+        # Keyboard shortcuts
+        # self.actionBack.setShortcut("Backspace")
+        # self.actionToggleFullscreen.setShortcut("F11")
+
+        # Start in fullscreen
+        # self.showFullScreen()
+
+        camera_button.setFocus()
+        # Load folders
+        
+        self.loadFolders(DROPBOX_ROOT_PATH)
+
+    def read_dropbox_token(self):
+        """Read Dropbox auth token from a file."""
+        file_path="./dropbox_token.txt"
+        try:
+            with open(file_path, "r") as f:
+                token = f.read().strip()
+            return token
+        except FileNotFoundError:
+            raise RuntimeError(f"Token file not found: {file_path}")
+        except Exception as e:
+            raise RuntimeError(f"Error reading token: {e}")
+
+    # ---------- Navigation ----------
+    def toggleFullscreen(self, checked):
+        if checked:
+            self.showFullScreen()
+        else:
+            self.showNormal()
+
+    def onBack(self):
+        idx = self.stack.currentIndex()
+        if idx == 2:
+            # From video -> stop and go to files
+            self.owning_widget.player.stop()
+            self.owning_widget.mode = Mode.SECURITY_CAMERA_FOLDER
+            self.stack.setCurrentIndex(1)
+        elif idx == 1:
+            # From files -> go to folders
+            self.stack.setCurrentIndex(0)
+        elif idx == 0:
+            #Top level, go back to camera grid
+            self.owning_widget.showCameras()
+
+    # def keyPressEvent(self, event):
+    #     if event.key() == Qt.Key_Escape:
+    #         # Escape exits video or fullscreen if not in video
+    #         if self.stack.currentIndex() == 2:
+    #             self.mediaPlayer.stop()
+    #             self.stack.setCurrentIndex(1)
+    #         else:
+    #             if self.isFullScreen():
+    #                 self.actionToggleFullscreen.setChecked(False)
+    #                 self.showNormal()
+    #     super().keyPressEvent(event)
+
+    # ---------- Dropbox interactions ----------
+    def loadFolders(self, path):
+        # Shows only folders at the given path
+        # self.statusBar().showMessage(f"Loading folders in {path}...")
+        worker = DropboxListWorker(self.dbx, path, list_folders_only=True, parent=self)
+        worker.listed.connect(self.onFoldersListed)
+        worker.start()
+
+    @pyqtSlot(str, list, str)
+    def onFoldersListed(self, path, entries, error):
+        if error:
+            QMessageBox.critical(self, "Dropbox error", error)
+            # self.statusBar().clearMessage()
+            return
+        # Transform to (name, path) for folders
+        folders = [(name, p) for kind, name, p in entries if kind == "folder"]
+        self.folderView.setFolders(folders)
+        self.stack.setCurrentIndex(0)
+        # self.statusBar().clearMessage()
+
+    def openFolder(self, path):
+        # self.statusBar().showMessage(f"Loading files in {path}...")
+        worker = DropboxListWorker(self.dbx, path, list_folders_only=False, parent=self)
+        worker.listed.connect(self.onFilesListed)
+        worker.start()
+
+    @pyqtSlot(str, list, str)
+    def onFilesListed(self, path, entries, error):
+        if error:
+            QMessageBox.critical(self, "Dropbox error", error)
+            # self.statusBar().clearMessage()
+            return
+        files = [(name, p) for kind, name, p in entries if kind == "file"]
+        self.fileView.setFiles(files)
+        self.stack.setCurrentIndex(1)
+        # self.statusBar().clearMessage()
+
+    def openFile(self, path):
+        name = Path(path).name.lower()
+        ext = Path(name).suffix
+        is_video = ext.lower() in (".mp4", ".mpeg", ".mpg", ".m4v")
+        if is_video:
+            self.downloadAndPlay(path)
+        else:
+            QMessageBox.information(self, "File selected", f"Selected file:\n{path}")
+
+    def downloadAndPlay(self, dropbox_path):
+        # self.statusBar().showMessage(f"Downloading {dropbox_path}...")
+        worker = DropboxDownloadWorker(self.dbx, dropbox_path, parent=self)
+        worker.downloaded.connect(self.onDownloaded)
+        worker.start()
+
+    @pyqtSlot(str, str, str)
+    def onDownloaded(self, dropbox_path, local_path, error):
+        # self.statusBar().clearMessage()
+        if error:
+            QMessageBox.critical(self, "Download error", error)
+            return
+        # Play video
+        url = QUrl.fromLocalFile(local_path)
+        self.owning_widget.player.setMedia(QMediaContent(url))
+        self.owning_widget.playerview.playButton.setFocus()
+        # self.owning_widget.fullscreen_layout.addWidget(self.owning_widget.view)
+
+        QTimer.singleShot(500, self.owning_widget.player.play)
+        # self.stack.setCurrentWidget(self.fullscreen_widget)
+        self.owning_widget.mode = Mode.SECURITY_VIDEO
+        self.stack.setCurrentIndex(2)
+
+        # self.videoWidget.setMinimumSize(640, 480)
+        # self.videoWidget.show()
+        # self.mediaPlayer.error.connect(lambda e: print("Error:", self.mediaPlayer.errorString()))
+        # self.mediaPlayer.stateChanged.connect(lambda s: print("State:", s))
+        # self.mediaPlayer.mediaStatusChanged.connect(lambda s: print("Status:", s))
+        # self.mediaPlayer.play()
+        # # Ensure fullscreen video
+        # if not self.isFullScreen():
+        #     self.showFullScreen()
+        #     self.actionToggleFullscreen.setChecked(True)
+
+        #     self.view = VideoView(self.fullscreen_widget)
+        #     self.fullscreen_layout.addWidget(self.view)
+
+        # self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
+        # self.player.setVideoOutput(self.view.video_item)
+        # self.player.setMedia(QMediaContent(QUrl(url)))
+        # self.fullscreen_layout.addWidget(self.view)
+
+        # # Debug signals
+        # self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
+        # self.player.stateChanged.connect(lambda s: print("Player state:", s))
+        # self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
+
+
 class WebGrid(QWidget):
     def __init__(self):
         super().__init__()
@@ -65,13 +623,22 @@ class WebGrid(QWidget):
         self.setLayout(self.stack)
 
         self.grid_widget = QWidget()
-        # self.grid_widget.setFocusPolicy(Qt.StrongFocus)
-        # self.grid_layout = QHBoxLayout(self.grid_widget)
+        self.grid_widget.setCursor(Qt.BlankCursor)
         self.stack.addWidget(self.grid_widget)
 
         self.fullscreen_widget = QWidget()
         self.fullscreen_layout = QVBoxLayout(self.fullscreen_widget)
         self.stack.addWidget(self.fullscreen_widget)
+
+        # Video view and player
+        self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
+        self.playerview = VideoPlayerWidget(self.player)
+        self.player.setVideoOutput(self.playerview.view.video_item)
+
+        # Debug signals
+        self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
+        self.player.stateChanged.connect(lambda s: print("Player state:", s))
+        self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
 
         self.init_grid()
         self.stack.setCurrentWidget(self.grid_widget)
@@ -107,7 +674,11 @@ class WebGrid(QWidget):
                 # Go back to grid view
                 self.showCameras()
                 return
-        if self.mode in (Mode.PLAY, Mode.SLIDESHOW):
+            elif self.mode == Mode.SECURITY_VIDEO or self.mode == Mode.SECURITY_CAMERA_FOLDER:
+                self.security_video_window.onBack()
+                return
+
+        if self.mode in (Mode.PLAY, Mode.SLIDESHOW, Mode.SECURITY_VIDEO):
             if key == Qt.Key_Pause:
                 self.toggle_play_pause()
             
@@ -132,57 +703,59 @@ class WebGrid(QWidget):
                 print("next image")
                 self.next_image()
                 return
-            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA:
+            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA or self.mode == Mode.SECURITY_VIDEO:
                 # In SLIDESHOW or CAMERA mode, move focus to next widget
                 print("right/down pressed, sending tab")
                 QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
                 return
-            elif self.mode == Mode.PHOTO_FOLDER:
+            elif self.mode == Mode.PHOTO_FOLDER or self.mode == Mode.SECURITY_CAMERA_FOLDER:
                 if key == Qt.Key_L:
                     # print("L key pressed in PHOTO_FOLDER, move to next widget")
                     QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Tab, Qt.NoModifier))
                     return
                 elif key == Qt.Key_J:
-                    print("J key pressed in PHOTO_FOLDER, move down widget")
+                    print("J key pressed in FOLDER, move down widget")
                     for r, row in enumerate(self.folder_buttons):
                         for c, btn in enumerate(row):
                             if btn is focus_widget:
                                 # Move to next row, same column
                                 if r + 1 < len(self.folder_buttons):
                                     next_row = self.folder_buttons[r + 1]
-                                    if c < len(next_row):
-                                        next_row[c].setFocus()
-                                        if self.folder_scroll_area:
-                                            self.folder_scroll_area.ensureWidgetVisible(next_row[c])
-                                        return                    
+                                    if c >= len(next_row):
+                                        c = len(next_row) - 1
+                                    next_row[c].setFocus()
+                                    if self.folder_scroll_area:
+                                        self.folder_scroll_area.ensureWidgetVisible(next_row[c])
+                                    return                    
         elif key in (Qt.Key_Left, Qt.Key_Up, Qt.Key_H, Qt.Key_K):
             if self.mode == Mode.PLAY:
                 print("prev image")
                 self.previous_image()
                 return
-            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA:
+            elif self.mode == Mode.SLIDESHOW or self.mode == Mode.CAMERA or self.mode == Mode.SECURITY_VIDEO:
                 print("left/up pressed, sending tab")
                 QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.NoModifier))
                 return
-            elif self.mode == Mode.PHOTO_FOLDER:
+            elif self.mode == Mode.PHOTO_FOLDER or self.mode == Mode.SECURITY_CAMERA_FOLDER:
                 if key == Qt.Key_H:
-                    print("H key pressed in PHOTO_FOLDER, move to prev widget")
+                    print("H key pressed in FOLDER, move to prev widget")
                     QApplication.sendEvent(focus_widget, QKeyEvent(QEvent.KeyPress, Qt.Key_Backtab, Qt.NoModifier))
                     return
                 elif key == Qt.Key_K:
-                    print("K key pressed in PHOTO_FOLDER, move up widget")
+                    print("K key pressed in FOLDER, move up widget")
                     for r, row in enumerate(self.folder_buttons):
                             for c, btn in enumerate(row):
                                 if btn is focus_widget:
                                     if r - 1 >= 0:
                                         prev_row = self.folder_buttons[r - 1]
-                                        if c < len(prev_row):
-                                            prev_row[c].setFocus()
-                                            if self.folder_scroll_area:
-                                                self.folder_scroll_area.ensureWidgetVisible(prev_row[c])
-                                            return
+                                        if c >= len(prev_row):
+                                            c = len(prev_row) - 1
+                                        prev_row[c].setFocus()
+                                        if self.folder_scroll_area:
+                                            self.folder_scroll_area.ensureWidgetVisible(prev_row[c])
+                                        return
         if key == Qt.Key_Enter or key == Qt.Key_Return:
-            if isinstance(focus_widget, QPushButton):
+            if isinstance(focus_widget, QPushButton) or isinstance(focus_widget, QToolButton):
                 focus_widget.click()
             elif isinstance(focus_widget, QLabel):
                 # Simulate mouse click on QLabel
@@ -201,7 +774,12 @@ class WebGrid(QWidget):
         top_layout.setContentsMargins(10, 10, 10, 10)
         top_layout.setSpacing(20)
 
-        # Image viewer label
+        self.viewer_btn = QPushButton("Security Videos")
+        self.viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
+        self.viewer_btn.clicked.connect(self.launch_security_video_viewer)
+        self.viewer_btn.setFocusPolicy(Qt.StrongFocus)
+        top_layout.addWidget(self.viewer_btn)
+
         self.viewer_btn = QPushButton("View Photos")
         self.viewer_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
         self.viewer_btn.clicked.connect(self.launch_image_viewer)
@@ -227,6 +805,7 @@ class WebGrid(QWidget):
 
         # Screen 1 (left side)
         browser1 = QWebEngineView()
+        browser1.setCursor(Qt.BlankCursor)
         browser1.retry_count = 0
         browser1.max_retries = 100
         browser1.url_to_load = QUrl(self.urls[0])
@@ -264,10 +843,12 @@ class WebGrid(QWidget):
 
         for i in range(1, 5):
             container = QWidget()
+            container.setCursor(Qt.BlankCursor)
             layout = QVBoxLayout(container)
             layout.setContentsMargins(0, 0, 0, 0)
 
             browser = QWebEngineView()
+            browser.setCursor(Qt.BlankCursor)
             browser.retry_count = 0
             browser.max_retries = 1000
             browser.url_to_load = QUrl(self.urls[i])
@@ -315,7 +896,7 @@ class WebGrid(QWidget):
                 print(f"Retrying {browser.url_to_load.toString()} (attempt {browser.retry_count})")
                 QTimer.singleShot(10000, lambda: browser.load(browser.url_to_load))  # Retry after 1s
             else:
-                print(f"Failed to load {browser.url_to_load.toString()} after {browser.max_retries} attempts")
+                print(f"Failed to load {browser.url_to_load.toString()} after {browser.retry_count} attempts")
                 # Optional: show error page or placeholder
 
     def show_fullscreen(self, url, video_mode=False):
@@ -340,18 +921,8 @@ class WebGrid(QWidget):
             self.fullscreen_layout.addWidget(browser)
             self.stack.setCurrentWidget(self.fullscreen_widget)
         else:
-            self.view = VideoView(self.fullscreen_widget)
-            self.fullscreen_layout.addWidget(self.view)
-
-            self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
-            self.player.setVideoOutput(self.view.video_item)
             self.player.setMedia(QMediaContent(QUrl(url)))
-            self.fullscreen_layout.addWidget(self.view)
-
-            # Debug signals
-            self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
-            self.player.stateChanged.connect(lambda s: print("Player state:", s))
-            self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
+            self.fullscreen_layout.addWidget(self.playerview)
 
             QTimer.singleShot(500, self.player.play)
             self.stack.setCurrentWidget(self.fullscreen_widget)
@@ -362,7 +933,7 @@ class WebGrid(QWidget):
         # Ensure video item fills the graphics view’s viewport
         if hasattr(self, "video_item") and hasattr(self, "view"):
             print("Resizing video item to fill viewport")
-            viewport_size = self.view.viewport().size()
+            viewport_size = self.playerview.viewport().size()
             self.video_item.setSize(QSizeF(viewport_size))
         super().resizeEvent(event)
     
@@ -378,6 +949,12 @@ class WebGrid(QWidget):
         self.viewer_btn.setFocus()
 
 
+    def launch_security_video_viewer(self):
+        self.timer.stop()
+        self.clear_fullscreen()
+        self.security_video_window = SecurityVideoWindow(self)
+        self.stack.setCurrentWidget(self.fullscreen_widget)        
+        
     def launch_image_viewer(self):
         self.timer.stop()
         self.clear_fullscreen()
@@ -514,7 +1091,10 @@ class WebGrid(QWidget):
                 row_buttons = [photo_btn]
                 count = 1
   
-            cols = 3  # Number of columns in the grid
+            if len(subfolders) > 20:
+                cols = 3  # Number of columns in the grid
+            else:
+                cols = 1  # Single column
             for i, sub in enumerate(sorted(subfolders)):
                 sub_path = os.path.join(folder_path, sub)
                 btn = QPushButton(sub)
@@ -596,6 +1176,7 @@ class WebGrid(QWidget):
 
         # Create a container widget with its own layout
         container = QWidget()
+        container.setCursor(Qt.BlankCursor)
         layout = QVBoxLayout(container)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(20)
