@@ -213,6 +213,7 @@ class DropboxFolderGridView(QWidget):
         super().__init__(parent)
         self.owning_widget = owning_widget
         self.top_row_buttons = top_row_buttons
+        self.folder_buttons = []
         self.scroll = QScrollArea(self)
         self.scroll.setWidgetResizable(True)
         self.owning_widget.folder_scroll_area = self.scroll
@@ -248,7 +249,9 @@ class DropboxFolderGridView(QWidget):
                 w.setParent(None)
 
         self.owning_widget.folder_buttons = [self.top_row_buttons]
-        
+        self.folder_buttons = [self.top_row_buttons]
+        self.owning_widget.folder_scroll_area = self.scroll
+
         # Populate grid
         cols = 4
         row, col = 0, 0
@@ -278,12 +281,14 @@ class DropboxFolderGridView(QWidget):
             col += 1
             if col >= cols:
                 self.owning_widget.folder_buttons.append(row_buttons)
+                self.folder_buttons.append(row_buttons)
                 row_buttons = []
                 col = 0
                 row += 1
 
         if row_buttons:
             self.owning_widget.folder_buttons.append(row_buttons)
+            self.folder_buttons.append(row_buttons)
 
 
 class DropboxFileGridView(QWidget):
@@ -294,6 +299,7 @@ class DropboxFileGridView(QWidget):
         super().__init__(parent)
         self.owning_widget = owning_widget
         self.top_row_buttons = top_row_buttons
+        self.folder_buttons = []
         self.scroll = QScrollArea(self)
         self.scroll.setWidgetResizable(True)
         self.container = QWidget()
@@ -331,6 +337,8 @@ class DropboxFileGridView(QWidget):
                 w.setParent(None)
 
         self.owning_widget.folder_buttons = [self.top_row_buttons]
+        self.folder_buttons = [self.top_row_buttons]
+        self.owning_widget.folder_scroll_area = self.scroll
 
         # Populate grid
         cols = 4
@@ -379,11 +387,13 @@ class DropboxFileGridView(QWidget):
             col += 1
             if col >= cols:
                 self.owning_widget.folder_buttons.append(row_buttons)
+                self.folder_buttons.append(row_buttons)
                 row_buttons = []
                 col = 0
                 row += 1
         if row_buttons:
             self.owning_widget.folder_buttons.append(row_buttons)
+            self.folder_buttons.append(row_buttons)
 
     def onActivated(self, item):
         path = item.data(Qt.UserRole)
@@ -500,8 +510,10 @@ class SecurityVideoWindow(QWidget):
             self.owning_widget.player.stop()
             self.owning_widget.mode = Mode.SECURITY_CAMERA_FOLDER
             self.stack.setCurrentIndex(1)
+            self.owning_widget.folder_buttons = self.fileView.folder_buttons
         elif idx == 1:
             # From files -> go to folders
+            self.owning_widget.folder_buttons = self.folderView.folder_buttons
             self.stack.setCurrentIndex(0)
         elif idx == 0:
             #Top level, go back to camera grid
