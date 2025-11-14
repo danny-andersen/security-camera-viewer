@@ -20,6 +20,8 @@ from enum import Enum, auto
 import dropbox
 from dropbox.files import FileMetadata, FolderMetadata
 
+import resources_rc  # ensures resources are loaded
+
 SOURCE_DIR = "/home/danny/Dropbox/Photos/Bigbertha_backup/"
 IMAGE_TIMER = 3000  # 3 seconds
 
@@ -303,9 +305,12 @@ class DropboxFileGridView(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.scroll)
 
+        # Icons 
+        # Provided by Icons 8 <a target="_blank" href="https://icons8.com/icon/35090/video">Video</a> icon by <a target="_blank" href="https://icons8.com">Icons8</a>
         self.icon_provider = QFileIconProvider()
         self.file_icon = self.icon_provider.icon(QFileIconProvider.File)
-        self.video_icon = QIcon.fromTheme("video-x-generic") or self.file_icon
+        # self.video_icon = QIcon.fromTheme("video-x-generic") or self.video_icon = QIcon(":/icons/video.png")
+        self.video_icon = QIcon(":/icons/icons/icons8-video-100.png")
         self.doc_icon = QIcon.fromTheme("text-x-generic") or self.file_icon
 
     def parse_datetime_from_name(self, name: str):
