@@ -73,7 +73,8 @@ class VideoPlayerWidget(QWidget):
 
         self.view = VideoView()
         self.player = player
-
+        self.player.setVideoOutput(self.view.video_item)
+        
         # --- Controls ---
         self.playButton = QPushButton("Play")
         self.playButton.setFixedHeight(60)   # ensure visible size
@@ -401,13 +402,13 @@ class DropboxFileGridView(QWidget):
             self.fileClicked.emit(path)
 
 class SecurityVideoWindow(QWidget):
-    def __init__(self, owning_widget, parent=None):
+    def __init__(self, owning_widget, parent_layout, parent=None):
         super().__init__(parent)
 
         self.owning_widget = owning_widget
         self.owning_widget.folder_buttons = []
         
-        self.parent_layout = owning_widget.fullscreen_layout
+        self.parent_layout = parent_layout
 
 
         dropbox_token = self.read_dropbox_token()
@@ -461,12 +462,13 @@ class SecurityVideoWindow(QWidget):
         self.folderView = DropboxFolderGridView(self.owning_widget, self.top_row_buttons)
         self.fileView = DropboxFileGridView(self.owning_widget, self.top_row_buttons)
         self.stack = QStackedLayout()
-
         self.parent_layout.addLayout(self.stack)
-
         self.stack.addWidget(self.folderView)  # index 0
         self.stack.addWidget(self.fileView)    # index 1
-        self.stack.addWidget(self.owning_widget.playerview) # index 2
+        self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
+        self.playview = VideoPlayerWidget(self.player)
+
+        self.stack.addWidget(self.playview) # index 2
 
         # Connections
         self.folderView.folderClicked.connect(self.openFolder)
@@ -475,6 +477,9 @@ class SecurityVideoWindow(QWidget):
         # Keyboard shortcuts
         # self.actionBack.setShortcut("Backspace")
         # self.actionToggleFullscreen.setShortcut("F11")
+
+
+        # self.stack.setCurrentWidget(self.folderView)
 
         # Start in fullscreen
         # self.showFullScreen()
@@ -517,6 +522,9 @@ class SecurityVideoWindow(QWidget):
             self.stack.setCurrentIndex(0)
         elif idx == 0:
             #Top level, go back to camera grid
+            self.owning_widget.folder_buttons = []
+            self.owning_widget.top_row_buttons = []
+            self.owning_widget.folder_scroll_area = None
             self.owning_widget.showCameras()
 
     # def keyPressEvent(self, event):
@@ -591,39 +599,14 @@ class SecurityVideoWindow(QWidget):
             return
         # Play video
         url = QUrl.fromLocalFile(local_path)
-        self.owning_widget.player.setMedia(QMediaContent(url))
-        self.owning_widget.playerview.playButton.setFocus()
+        self.player.setMedia(QMediaContent(url))
+        self.playview.playButton.setFocus()
         # self.owning_widget.fullscreen_layout.addWidget(self.owning_widget.view)
 
-        QTimer.singleShot(500, self.owning_widget.player.play)
+        QTimer.singleShot(500, self.player.play)
         # self.stack.setCurrentWidget(self.fullscreen_widget)
         self.owning_widget.mode = Mode.SECURITY_VIDEO
         self.stack.setCurrentIndex(2)
-
-        # self.videoWidget.setMinimumSize(640, 480)
-        # self.videoWidget.show()
-        # self.mediaPlayer.error.connect(lambda e: print("Error:", self.mediaPlayer.errorString()))
-        # self.mediaPlayer.stateChanged.connect(lambda s: print("State:", s))
-        # self.mediaPlayer.mediaStatusChanged.connect(lambda s: print("Status:", s))
-        # self.mediaPlayer.play()
-        # # Ensure fullscreen video
-        # if not self.isFullScreen():
-        #     self.showFullScreen()
-        #     self.actionToggleFullscreen.setChecked(True)
-
-        #     self.view = VideoView(self.fullscreen_widget)
-        #     self.fullscreen_layout.addWidget(self.view)
-
-        # self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
-        # self.player.setVideoOutput(self.view.video_item)
-        # self.player.setMedia(QMediaContent(QUrl(url)))
-        # self.fullscreen_layout.addWidget(self.view)
-
-        # # Debug signals
-        # self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
-        # self.player.stateChanged.connect(lambda s: print("Player state:", s))
-        # self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
-
 
 class WebGrid(QWidget):
     def __init__(self):
@@ -634,6 +617,7 @@ class WebGrid(QWidget):
         self.mode = Mode.CAMERA  # Track current mode
         self.icon_provider = QFileIconProvider()
         self.breadcrumbs = []  # List of folder names
+        self.current_photo_folder = None
         self.setWindowTitle("Camera Monitoring")
         self.setStyleSheet("background-color: black;")
         self.stack = QStackedLayout(self)
@@ -647,15 +631,20 @@ class WebGrid(QWidget):
         self.fullscreen_layout = QVBoxLayout(self.fullscreen_widget)
         self.stack.addWidget(self.fullscreen_widget)
 
+        self.security_video_widget = QWidget()
+        self.security_video_layout = QVBoxLayout(self.security_video_widget)
+        self.security_video_window = SecurityVideoWindow(self, self.security_video_layout)
+        self.stack.addWidget(self.security_video_widget)
+
         # Video view and player
         self.player = QMediaPlayer(self, QMediaPlayer.VideoSurface)
         self.playerview = VideoPlayerWidget(self.player)
-        self.player.setVideoOutput(self.playerview.view.video_item)
 
         # Debug signals
         self.player.mediaStatusChanged.connect(lambda s: print("Media status:", s))
         self.player.stateChanged.connect(lambda s: print("Player state:", s))
         self.player.error.connect(lambda e: print("Error:", self.player.errorString()))
+
 
         self.init_grid()
         self.stack.setCurrentWidget(self.grid_widget)
@@ -969,8 +958,7 @@ class WebGrid(QWidget):
     def launch_security_video_viewer(self):
         self.timer.stop()
         self.clear_fullscreen()
-        self.security_video_window = SecurityVideoWindow(self)
-        self.stack.setCurrentWidget(self.fullscreen_widget)        
+        self.stack.setCurrentWidget(self.security_video_widget)        
         
     def launch_image_viewer(self):
         self.timer.stop()
