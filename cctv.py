@@ -217,7 +217,6 @@ class DropboxFolderGridView(QWidget):
         self.folder_buttons = []
         self.scroll = QScrollArea(self)
         self.scroll.setWidgetResizable(True)
-        self.owning_widget.folder_scroll_area = self.scroll
         self.container = QWidget()
         self.grid = QGridLayout(self.container)
         self.grid.setSpacing(16)
@@ -249,9 +248,8 @@ class DropboxFolderGridView(QWidget):
             if w:
                 w.setParent(None)
 
-        self.owning_widget.folder_buttons = [self.top_row_buttons]
+        # self.owning_widget.folder_buttons = [self.top_row_buttons]
         self.folder_buttons = [self.top_row_buttons]
-        self.owning_widget.folder_scroll_area = self.scroll
 
         # Populate grid
         cols = 4
@@ -281,15 +279,18 @@ class DropboxFolderGridView(QWidget):
             row_buttons.append(btn)
             col += 1
             if col >= cols:
-                self.owning_widget.folder_buttons.append(row_buttons)
+                # self.owning_widget.folder_buttons.append(row_buttons)
                 self.folder_buttons.append(row_buttons)
                 row_buttons = []
                 col = 0
                 row += 1
 
         if row_buttons:
-            self.owning_widget.folder_buttons.append(row_buttons)
+            # self.owning_widget.folder_buttons.append(row_buttons)
             self.folder_buttons.append(row_buttons)
+        #Set buttons in owning widget so that navigation works
+        self.owning_widget.folder_buttons = self.folder_buttons
+        self.owning_widget.folder_scroll_area = self.scroll
 
 
 class DropboxFileGridView(QWidget):
@@ -337,9 +338,7 @@ class DropboxFileGridView(QWidget):
             if w:
                 w.setParent(None)
 
-        self.owning_widget.folder_buttons = [self.top_row_buttons]
         self.folder_buttons = [self.top_row_buttons]
-        self.owning_widget.folder_scroll_area = self.scroll
 
         # Populate grid
         cols = 4
@@ -387,14 +386,19 @@ class DropboxFileGridView(QWidget):
             row_buttons.append(btn)
             col += 1
             if col >= cols:
-                self.owning_widget.folder_buttons.append(row_buttons)
+                # self.owning_widget.folder_buttons.append(row_buttons)
                 self.folder_buttons.append(row_buttons)
                 row_buttons = []
                 col = 0
                 row += 1
         if row_buttons:
-            self.owning_widget.folder_buttons.append(row_buttons)
+            # self.owning_widget.folder_buttons.append(row_buttons)
             self.folder_buttons.append(row_buttons)
+            
+        #Set buttons in owning widget so that navigation works
+        self.owning_widget.folder_buttons = self.folder_buttons
+        self.owning_widget.folder_scroll_area = self.scroll
+
 
     def onActivated(self, item):
         path = item.data(Qt.UserRole)
@@ -406,10 +410,7 @@ class SecurityVideoWindow(QWidget):
         super().__init__(parent)
 
         self.owning_widget = owning_widget
-        self.owning_widget.folder_buttons = []
-        
         self.parent_layout = parent_layout
-
 
         dropbox_token = self.read_dropbox_token()
         self.dbx = dropbox.Dropbox(dropbox_token)
@@ -457,7 +458,7 @@ class SecurityVideoWindow(QWidget):
         self.top_row_buttons.append(back_button)
         
         self.parent_layout.addWidget(breadcrumb_bar)
-        self.owning_widget.folder_buttons.append(self.top_row_buttons)
+        # self.owning_widget.folder_buttons.append(self.top_row_buttons)
         
         self.folderView = DropboxFolderGridView(self.owning_widget, self.top_row_buttons)
         self.fileView = DropboxFileGridView(self.owning_widget, self.top_row_buttons)
@@ -473,16 +474,6 @@ class SecurityVideoWindow(QWidget):
         # Connections
         self.folderView.folderClicked.connect(self.openFolder)
         self.fileView.fileClicked.connect(self.openFile)
-
-        # Keyboard shortcuts
-        # self.actionBack.setShortcut("Backspace")
-        # self.actionToggleFullscreen.setShortcut("F11")
-
-
-        # self.stack.setCurrentWidget(self.folderView)
-
-        # Start in fullscreen
-        # self.showFullScreen()
 
         camera_button.setFocus()
         # Load folders
@@ -937,10 +928,13 @@ class WebGrid(QWidget):
 
     def resizeEvent(self, event):
         # Ensure video item fills the graphics view’s viewport
-        if hasattr(self, "video_item") and hasattr(self, "view"):
-            print("Resizing video item to fill viewport")
-            viewport_size = self.playerview.viewport().size()
-            self.video_item.setSize(QSizeF(viewport_size))
+        if hasattr(self, "video_item"):
+            if hasattr(self, "view"):
+                print("Resizing video item to fill viewport")
+                viewport_size = self.playerview.viewport().size()
+                self.video_item.setSize(QSizeF(viewport_size))
+            else:
+                self.video_item.setSize(QSizeF(self.fullscreen_widget.size()))                
         super().resizeEvent(event)
     
     def handle_player_error(self, error):
@@ -958,6 +952,7 @@ class WebGrid(QWidget):
     def launch_security_video_viewer(self):
         self.timer.stop()
         self.clear_fullscreen()
+        self.mode = Mode.SECURITY_CAMERA_FOLDER
         self.stack.setCurrentWidget(self.security_video_widget)        
         
     def launch_image_viewer(self):
@@ -1307,22 +1302,6 @@ class WebGrid(QWidget):
             scaled = pixmap.scaled(self.slideshow_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.slideshow_label.setPixmap(scaled)
         
-        # # Use label dimensions directly to avoid zero-size issues
-        # target_width = self.slideshow_label.width()
-        # target_height = self.slideshow_label.height()
-
-        # if target_width > 0 and target_height > 0:
-        #     scaled = pixmap.scaled(
-        #         target_width,
-        #         target_height,
-        #         Qt.KeepAspectRatio,
-        #         Qt.SmoothTransformation
-        #     )
-        #     self.slideshow_label.setPixmap(scaled)
-        # else:
-        #     # Fallback: show original pixmap until layout is ready
-        #     self.slideshow_label.setPixmap(pixmap)
-
     def next_image(self):
         if self.mode == Mode.PLAY:
             self.timer.stop()
