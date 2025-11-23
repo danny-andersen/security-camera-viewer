@@ -976,7 +976,7 @@ class WebGrid(QWidget):
 
         entries = os.listdir(folder_path)
         subfolders = [f for f in entries if os.path.isdir(os.path.join(folder_path, f))]
-        images = [f for f in entries if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
+        images = [f for f in entries if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif", "mp4", "avi", "mov", "mkv", "m3u8"))]
 
         if images and not subfolders:
             self.show_images(folder_path, images)
@@ -1162,7 +1162,7 @@ class WebGrid(QWidget):
         self.mode = Mode.SLIDESHOW
 
         image_files = [f for f in os.listdir(folder_path)
-                    if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif"))]
+                    if f.lower().endswith((".png", ".jpg", ".jpeg", ".bmp", ".gif", "mp4", "avi", "mov", "mkv", "m3u8"))]
 
         if not image_files:
             label = QLabel("No images found!")
@@ -1266,13 +1266,15 @@ class WebGrid(QWidget):
         self.slideshow_label.setAlignment(Qt.AlignCenter)
         self.slideshow_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.slideshow_label)
+        self.playerview = VideoPlayerWidget(self.player)
+        layout.addWidget(self.playerview)
 
-        # Add container to fullscreen layout
         self.fullscreen_layout.addWidget(container)
+        self.stack.setCurrentWidget(self.fullscreen_widget)
 
         self.show_image()
         QTimer.singleShot(0, lambda: self.show_image()) # Refresh image after layout
-        self.stack.setCurrentWidget(self.fullscreen_widget)
+
         self.play_pause_btn.setFocus()
 
     def clear_fullscreen(self):
@@ -1284,24 +1286,46 @@ class WebGrid(QWidget):
 
     def show_image(self):
         path = self.slideshow_images[self.slideshow_index]
-        pixmap = QPixmap(path)
 
         if self.mode == Mode.PLAY:
             # Hide control buttons
             self.slideshow_controls.hide()
-
-            # Resize image to fullscreen
-            screen_size = QApplication.primaryScreen().size()
-            scaled = pixmap.scaled(screen_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.slideshow_label.setPixmap(scaled)
-            self.slideshow_label.setAlignment(Qt.AlignCenter)
         else:
             # Show controls
             self.slideshow_controls.show()
 
-            # Fit image to label size
-            scaled = pixmap.scaled(self.slideshow_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        filename = os.path.basename(path)
+        ext = filename.lower().split(".")[-1]
+        if ext in ["jpg", "jpeg", "png", "bmp", "gif"]:
+            pixmap = QPixmap(path)
+            if self.mode == Mode.PLAY:
+                # Resize image to fullscreen
+                screen_size = QApplication.primaryScreen().size()
+                scaled = pixmap.scaled(screen_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.play_pause_btn.setFocus()
+            else:
+                # Fit image to label size
+                scaled = pixmap.scaled(self.slideshow_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+ 
             self.slideshow_label.setPixmap(scaled)
+            self.playerview.hide()
+            self.slideshow_label.show()
+            self.slideshow_label.setAlignment(Qt.AlignCenter)
+        elif ext in ["mp4", "avi", "mov", "mkv", "m3u8"]:
+            # Video display
+            self.timer.stop()
+            self.player.setMedia(QMediaContent(QUrl.fromLocalFile(path)))
+            # Connect to end-of-media
+            self.player.mediaStatusChanged.connect(self.on_media_status)
+            self.slideshow_label.hide()
+            self.playerview.show()
+            self.playerview.playButton.setFocus()
+
+            QTimer.singleShot(200, self.player.play)
+
+    def on_media_status(self, status):
+        if status == QMediaPlayer.EndOfMedia:
+            self.next_image()
         
     def next_image(self):
         if self.mode == Mode.PLAY:
