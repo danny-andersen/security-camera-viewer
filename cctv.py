@@ -919,6 +919,7 @@ class WebGrid(QWidget):
             self.stack.setCurrentWidget(self.fullscreen_widget)
         else:
             self.player.setMedia(QMediaContent(QUrl(url)))
+            self.playerview = VideoPlayerWidget(self.player)
             self.fullscreen_layout.addWidget(self.playerview)
 
             QTimer.singleShot(500, self.player.play)
