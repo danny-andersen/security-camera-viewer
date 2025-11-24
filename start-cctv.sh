@@ -7,7 +7,7 @@ while $(sleep 10); do
 done
 #System should be ready now
 #Wait a bit more to ensure all services are up, including networking and display manager
-sleep 40
+sleep 10
 export DISPLAY=:0
 source venv/bin/activate
 python cctv.py

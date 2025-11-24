@@ -787,8 +787,14 @@ class WebGrid(QWidget):
         self.open_webcam_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
         self.open_webcam_btn.setFocusPolicy(Qt.StrongFocus)
         self.open_webcam_btn.clicked.connect(lambda event, u="https://camsecure.uk/HLS/rhough.m3u8": self.show_fullscreen(u, video_mode=True))
-
         top_layout.addWidget(self.open_webcam_btn)        
+
+        self.exit_btn = QPushButton("Exit / Restart")
+        self.exit_btn.setStyleSheet("font-size: 20px; padding: 10px; color: white; background-color: #444;")
+        self.exit_btn.setFocusPolicy(Qt.StrongFocus)
+        self.exit_btn.clicked.connect(self.closeApp)
+        top_layout.addWidget(self.exit_btn)        
+
         outer_layout.addWidget(top_row)
 
         # Main horizontal layout: left + right
@@ -884,6 +890,9 @@ class WebGrid(QWidget):
         self.grid_widget.setLayout(outer_layout)     
         self.viewer_btn.setFocus()   
     
+    def closeApp(self):
+        QApplication.quit()
+        
     def handle_load_finished(self, browser, success):
         if success:
             browser.retry_count = 0  # Reset on success

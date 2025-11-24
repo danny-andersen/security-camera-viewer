@@ -1,0 +1,6 @@
+[Desktop Entry]
+Type=Application
+Terminal=False
+Name=security-cam
+Icon=/home/danny/git/security-camera-viewer/cctv.png
+Exec=/home/danny/git/security-camera-viewer/run-cctv.sh
