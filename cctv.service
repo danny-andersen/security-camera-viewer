@@ -5,7 +5,7 @@ Description=Service to provide a GUI that shows all 5 external cameras
 User=danny
 WorkingDirectory=/home/danny/security-camera-viewer
 ExecStart=/home/danny/security-camera-viewer/start-cctv.sh
-Restart=on-failure
+Restart=always
 
 [Install]
 WantedBy=multi-user.target
