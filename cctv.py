@@ -160,15 +160,24 @@ class DropboxListWorker(QThread):
 
     def run(self):
         try:
-            res = self.dbx.files_list_folder(self.path)
+            result = self.dbx.files_list_folder(self.path)
             entries = []
-            for e in res.entries:
+            for e in result.entries:
                 if isinstance(e, FolderMetadata):
                     entries.append(("folder", e.name, e.path_lower))
                 elif isinstance(e, FileMetadata):
                     if self.list_folders_only:
                         continue
                     entries.append(("file", e.name, e.path_lower))
+            # Handle pagination (if many items)
+            while result.has_more:
+                result = self.dbx.files_list_folder_continue(result.cursor)
+                for e in result.entries:
+                    if isinstance(e, FolderMetadata):
+                        entries.append(("folder", e.name, e.path_lower))
+                    elif not self.list_folders_only and isinstance(e, FileMetadata):
+                        entries.append(("file", e.name, e.path_lower))
+
             self.listed.emit(self.path, entries, "")
         except Exception as e:
             self.listed.emit(self.path, [], str(e))
@@ -615,7 +624,7 @@ class WebGrid(QWidget):
         self.setLayout(self.stack)
 
         self.grid_widget = QWidget()
-        self.grid_widget.setCursor(Qt.BlankCursor)
+        # self.grid_widget.setCursor(Qt.BlankCursor)
         self.stack.addWidget(self.grid_widget)
 
         self.fullscreen_widget = QWidget()
@@ -838,13 +847,52 @@ class WebGrid(QWidget):
         left_layout.addWidget(browser1)
         left_layout.addWidget(fsbutton0)
 
-        # Screens 2–5 (right grid)
-        right_widget = QWidget()
-        right_grid = QGridLayout(right_widget)
-        right_grid.setContentsMargins(0, 0, 0, 0)
-        right_grid.setSpacing(2)
+        # Right layout is two parts, first is the first camera on top of the three following cameras
+        
+        right_layout = QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(2)
 
-        for i in range(1, 5):
+        top_right_layout = QVBoxLayout()
+        top_right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        browser = QWebEngineView()
+        browser.setCursor(Qt.BlankCursor)
+        browser.retry_count = 0
+        browser.max_retries = 1000
+        browser.url_to_load = QUrl(self.urls[1])
+        browser.load(browser.url_to_load)
+        browser.loadFinished.connect(lambda success, b=browser: self.handle_load_finished(b, success))        
+        browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        button = QPushButton(f"{2} {self.urlnames[1]}")
+        button.setStyleSheet("""
+            QPushButton {
+                color: white;
+                font-size: 28px;
+                padding: 8px;
+            }
+            QPushButton:focus {
+                border: 2px solid #00ffff;
+                background-color: #222;
+            }
+        """)
+        button.setCursor(Qt.PointingHandCursor)
+        button.setFocusPolicy(Qt.StrongFocus)
+        button.setMinimumHeight(40)
+        button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
+        button.clicked.connect(lambda event, u=self.urls[1]: self.show_fullscreen(u))
+
+        top_right_layout.addWidget(browser)
+        top_right_layout.addWidget(button)
+        
+        # Screens 2–5 (bottom right grid)
+        bottom_right_widget = QWidget()
+        bottom_right_grid = QGridLayout(bottom_right_widget)
+        bottom_right_grid.setContentsMargins(0, 0, 0, 0)
+        bottom_right_grid.setSpacing(2)
+
+        for i in range(2, 5):
             container = QWidget()
             container.setCursor(Qt.BlankCursor)
             layout = QVBoxLayout(container)
@@ -880,11 +928,12 @@ class WebGrid(QWidget):
             layout.addWidget(browser)
             layout.addWidget(button)
 
-            row, col = divmod(i - 1, 2)
-            right_grid.addWidget(container, row, col)
+            bottom_right_grid.addWidget(container, 0, i-1)
 
+        right_layout.addLayout(top_right_layout)
+        right_layout.addWidget(bottom_right_widget)
         main_layout.addLayout(left_layout, 1)
-        main_layout.addWidget(right_widget, 2)
+        main_layout.addLayout(right_layout, 2)
         
         outer_layout.addLayout(main_layout)
         self.grid_widget.setLayout(outer_layout)     
