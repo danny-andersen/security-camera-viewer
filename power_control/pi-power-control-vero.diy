@@ -565,7 +565,7 @@
     <diylc.semiconductors.DIL__IC>
       <name>IC2</name>
       <alpha>100</alpha>
-      <value>Arduino-Nano</value>
+      <value>Arduino-ESP32-Nano</value>
       <orientation>DEFAULT</orientation>
       <pinCount>_30</pinCount>
       <pinSpacing value="0.1" unit="in"/>

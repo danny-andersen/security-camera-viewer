@@ -24,3 +24,4 @@ tv-remote/README.md
 tv-remote/modification.sh
 dropbox_token.txt
 cctv.png
+power_control/wifi-private.h
