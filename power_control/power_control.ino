@@ -205,8 +205,10 @@ void checkCameraState(unsigned long delayTime)
 
 void setLED(Colours colour)
 {
-  Serial.print("Setting colour to ");
-  Serial.println(colour);
+  if (DEBUG) {
+    Serial.print("Setting colour to ");
+    Serial.println(colour);
+  }
   switch (colour)
   {
   case (OFF):
