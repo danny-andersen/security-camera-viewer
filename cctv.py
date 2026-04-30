@@ -806,93 +806,29 @@ class WebGrid(QWidget):
 
         outer_layout.addWidget(top_row)
 
-        # Main horizontal layout: left + right
-        main_layout = QHBoxLayout()
+        # Layout is two parts, first is the first two cameras on top of the following four cameras
+        main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(2)
 
-        left_layout = QVBoxLayout()
-        left_layout.setContentsMargins(0, 0, 0, 0)
-        left_layout.setSpacing(2)
+        top_layout = QVBoxLayout()
+        top_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Screen 1 (left side)
-        browser1 = QWebEngineView()
-        browser1.setCursor(Qt.BlankCursor)
-        browser1.retry_count = 0
-        browser1.max_retries = 100
-        browser1.url_to_load = QUrl(self.urls[0])
-        browser1.load(browser1.url_to_load)
-        browser1.loadFinished.connect(lambda success, b=browser1: self.handle_load_finished(b, success))        
-        browser1.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        top_widget = QWidget()
+        top_grid = QGridLayout(top_widget)
+        top_grid.setContentsMargins(0, 0, 0, 0)
+        top_grid.setSpacing(2)
 
-        fsbutton0 = QPushButton(f"1 {self.urlnames[0]}")
-        fsbutton0.setStyleSheet("""
-            QPushButton {
-                color: white;
-                font-size: 28px;
-                padding: 8px;
-            }
-            QPushButton:focus {
-                border: 2px solid #00ffff;
-                background-color: #222;
-            }
-        """)
-        fsbutton0.setCursor(Qt.PointingHandCursor)
-        fsbutton0.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        fsbutton0.setFocusPolicy(Qt.StrongFocus)
-        fsbutton0.clicked.connect(lambda event, u=self.urls[0]: self.show_fullscreen(u))
-        # fsbutton0.mousePressEvent = lambda event, u=self.urls[0]: self.show_fullscreen(u)
-        # fsbutton0.setAttribute(Qt.WA_TransparentForMouseEvents, False)  # Optional: allows mouse + keyboard
+        bottom_layout = QVBoxLayout()
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        # bottom_layout.setSpacing(2)
 
-        left_layout.addWidget(browser1)
-        left_layout.addWidget(fsbutton0)
+        bottom_widget = QWidget()
+        bottom_grid = QGridLayout(bottom_widget)
+        bottom_grid.setContentsMargins(0, 0, 0, 0)
+        bottom_grid.setSpacing(2)
 
-        # Right layout is two parts, first is the first camera on top of the three following cameras
-        
-        right_layout = QVBoxLayout()
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(2)
-
-        top_right_layout = QVBoxLayout()
-        top_right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        browser = QWebEngineView()
-        browser.setCursor(Qt.BlankCursor)
-        browser.retry_count = 0
-        browser.max_retries = 1000
-        browser.url_to_load = QUrl(self.urls[1])
-        browser.load(browser.url_to_load)
-        browser.loadFinished.connect(lambda success, b=browser: self.handle_load_finished(b, success))        
-        browser.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-
-        button = QPushButton(f"{2} {self.urlnames[1]}")
-        button.setStyleSheet("""
-            QPushButton {
-                color: white;
-                font-size: 28px;
-                padding: 8px;
-            }
-            QPushButton:focus {
-                border: 2px solid #00ffff;
-                background-color: #222;
-            }
-        """)
-        button.setCursor(Qt.PointingHandCursor)
-        button.setFocusPolicy(Qt.StrongFocus)
-        button.setMinimumHeight(40)
-        button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
-        button.clicked.connect(lambda event, u=self.urls[1]: self.show_fullscreen(u))
-
-        top_right_layout.addWidget(browser)
-        top_right_layout.addWidget(button)
-        
-        # Screens 2–5 (bottom right grid)
-        bottom_right_widget = QWidget()
-        bottom_right_grid = QGridLayout(bottom_right_widget)
-        bottom_right_grid.setContentsMargins(0, 0, 0, 0)
-        bottom_right_grid.setSpacing(2)
-
-        for i in range(2, 5):
+        for i in range(0, 6):
             container = QWidget()
             container.setCursor(Qt.BlankCursor)
             layout = QVBoxLayout(container)
@@ -928,12 +864,15 @@ class WebGrid(QWidget):
             layout.addWidget(browser)
             layout.addWidget(button)
 
-            bottom_right_grid.addWidget(container, 0, i-1)
+            if i < 2:
+                top_grid.addWidget(container, 0, i)
+            else:         
+                bottom_grid.addWidget(container, 0, i)
 
-        right_layout.addLayout(top_right_layout)
-        right_layout.addWidget(bottom_right_widget)
-        main_layout.addLayout(left_layout, 1)
-        main_layout.addLayout(right_layout, 2)
+        # top_layout.addWidget(top_widget)
+        # bottom_layout.addWidget(bottom_widget)
+        main_layout.addWidget(top_widget)
+        main_layout.addWidget(bottom_widget)
         
         outer_layout.addLayout(main_layout)
         self.grid_widget.setLayout(outer_layout)     
