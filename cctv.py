@@ -666,6 +666,19 @@ class WebGrid(QWidget):
         except Exception as e:
             print(f"Error loading URLs: {e}")
 
+        # self.name = ""
+        # self.password = ""
+        # try:
+        #     with open("credentials.txt", "r") as f:
+        #         for line in f:
+        #             parts = line.strip().split(",", 1)  # Split into 2 parts: name and password
+        #             if len(parts) == 2:
+        #                 self.name, self.password = parts
+        #                 break
+        # except Exception as e:
+        #     print(f"Error loading username and pwd: {e}")
+
+
     def keyPressEvent(self, event):
         key = event.key()
         if key == Qt.Key_Backspace:
@@ -884,6 +897,17 @@ class WebGrid(QWidget):
     def handle_load_finished(self, browser, success):
         if success:
             browser.retry_count = 0  # Reset on success
+            # js = """
+            #         // Replace these with the actual element IDs or selectors
+            #         document.querySelector('input[name="username"]').value = '%s';
+            #         document.querySelector('input[name="password"]').value = '%s';
+
+            #         // Optionally auto-submit the form
+            #         let form = document.querySelector('form');
+            #         if (form) form.submit();
+            #     """ % ("my_username", "my_password")
+
+            # browser.page().runJavaScript(js)            
         else:
             if browser.retry_count < browser.max_retries:
                 browser.retry_count += 1
