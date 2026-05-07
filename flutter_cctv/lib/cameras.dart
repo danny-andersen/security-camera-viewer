@@ -90,6 +90,8 @@ void areWeOnLocalNetwork(Function callback) {
                 callback(false);
               });
           break;
+        } else {
+          callback(false);
         }
       }
     }

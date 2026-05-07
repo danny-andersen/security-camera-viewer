@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
@@ -64,25 +66,53 @@ class MyAppState extends State<MyApp> {
     setState(() {
       //Read contents of file and set the external IP address
       extHost = contents.trim();
-      CameraEntry.extHost = extHost;
       URLCredential creds = URLCredential(
         username: username,
         password: password,
       );
 
       //Set the credentials for the external cameras ip
-      for (int i = 0; i < 8; i++) {
+      for (int i = 0; i < 10; i++) {
         httpAuthCredentialDatabase.setHttpAuthCredential(
           protectionSpace: URLProtectionSpace(
             host: extHost,
             protocol: "https",
-            realm: "Motion",
+            realm: "",
             port: extStartPort + i,
           ),
           credential: creds,
         );
       }
+      CameraEntry.extHost = extHost;
     });
+    prewarmAllCameras();
+  }
+
+  Future<void> prewarmAllCameras() async {
+    List<Future> futures = [];
+
+    for (int i = 0; i < 10; i++) {
+      final port = extStartPort + i;
+      final url = "https://$extHost:$port/";
+
+      futures.add(warmCamera(url));
+    }
+
+    await Future.wait(futures);
+  }
+
+  Future<void> warmCamera(String url) async {
+    try {
+      final client =
+          HttpClient()
+            ..badCertificateCallback =
+                (cert, host, port) => true; // allow self-signed
+
+      final request = await client.openUrl("HEAD", Uri.parse(url));
+      await request.close(); // we don't care about the response body
+    } catch (_) {
+      // ignore failures — the goal is to trigger auth
+    }
   }
 
   // This widget is the root of your application.
@@ -132,24 +162,18 @@ class _CameraScreenState extends State<CameraScreen> {
   @override
   void initState() {
     super.initState();
-    // loadCameraList().then((list) {
-    //   setState(() => cameras = list);
-    // });
   }
 
   void refresh() {
     setState(() => mode = mode);
   }
 
-  // void openFullscreen(CameraEntry entry) {
-  //   Navigator.push(
-  //     context,
-  //     MaterialPageRoute(builder: (_) => CameraWindow(entry: entry)),
-  //   );
-  // }
-
   @override
   Widget build(BuildContext context) {
+    if (CameraEntry.extHost == "") {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
     return PopScope(
       //Go to previous display mode if in singleWindow mode
       canPop: mode != CameraMode.singleWindow,
