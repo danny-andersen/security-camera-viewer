@@ -1,10 +1,5 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter/services.dart';
-import 'package:dart_ping/dart_ping.dart';
 
 import 'cameras.dart';
 import 'dropbox-api.dart';
@@ -13,8 +8,6 @@ import 'local_settings.dart';
 
 HttpAuthCredentialDatabase httpAuthCredentialDatabase =
     HttpAuthCredentialDatabase.instance();
-
-enum CameraMode { allExternal, front, interior }
 
 void main() {
   runApp(const MyApp());
@@ -133,6 +126,8 @@ class CameraScreen extends StatefulWidget {
 
 class _CameraScreenState extends State<CameraScreen> {
   CameraMode mode = CameraMode.allExternal;
+  CameraMode previousMode = CameraMode.allExternal;
+  int selectedCamera = 0;
 
   @override
   void initState() {
@@ -146,58 +141,123 @@ class _CameraScreenState extends State<CameraScreen> {
     setState(() => mode = mode);
   }
 
-  void openFullscreen(CameraEntry entry) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => CameraWindow(entry: entry)),
-    );
-  }
+  // void openFullscreen(CameraEntry entry) {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(builder: (_) => CameraWindow(entry: entry)),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Camera Viewer", style: TextStyle(fontSize: 18)),
-        titleSpacing: 0,
-        toolbarHeight: 34,
+    return PopScope(
+      //Go to previous display mode if in singleWindow mode
+      canPop: mode != CameraMode.singleWindow,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop && mode == CameraMode.singleWindow) {
+          setState(() {
+            mode = previousMode;
+            selectedCamera = 0;
+          });
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text("Camera Viewer", style: TextStyle(fontSize: 18)),
+          titleSpacing: 0,
+          toolbarHeight: 34,
 
-        actions: [
-          TextButton(
-            onPressed: () => setState(() => mode = CameraMode.allExternal),
-            child: const Text(
-              "External cameras",
-              style: TextStyle(fontSize: 16),
+          actions: [
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.all),
+              child: const Text("All", style: TextStyle(fontSize: 16)),
             ),
-          ),
-          TextButton(
-            onPressed: () => setState(() => mode = CameraMode.front),
-            child: const Text("Front cameras", style: TextStyle(fontSize: 16)),
-          ),
-          TextButton(
-            onPressed: () => setState(() => mode = CameraMode.interior),
-            child: const Text(
-              "Interior cameras",
-              style: TextStyle(fontSize: 16),
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.allExternal),
+              child: const Text("Ext", style: TextStyle(fontSize: 16)),
             ),
-          ),
-        ],
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.interior),
+              child: const Text("Int", style: TextStyle(fontSize: 16)),
+            ),
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.front),
+              child: const Text("Front", style: TextStyle(fontSize: 16)),
+            ),
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.frontBack),
+              child: const Text("F&B", style: TextStyle(fontSize: 16)),
+            ),
+            TextButton(
+              onPressed: () => setState(() => mode = CameraMode.sides),
+              child: const Text("Sides", style: TextStyle(fontSize: 16)),
+            ),
+          ],
+        ),
+        body: _buildLayout(),
       ),
-      body: _buildLayout(),
     );
   }
 
   Widget _buildLayout() {
     switch (mode) {
+      case CameraMode.singleWindow:
+        return _cameraBox(selectedCamera);
+
       case CameraMode.front:
         return _twoSideBySide(3, 9);
 
+      case CameraMode.frontBack:
+        return Column(
+          children: [
+            Expanded(child: _cameraBox(6)),
+            Expanded(child: _cameraBox(9)),
+          ],
+        );
+
       case CameraMode.interior:
         return _twoSideBySide(5, 8);
+
+      case CameraMode.sides:
+        return Row(
+          children: [
+            Expanded(child: _cameraBox(3)),
+            Expanded(child: _cameraBox(2)),
+            Expanded(child: _cameraBox(4)),
+            Expanded(child: _cameraBox(7)),
+          ],
+        );
 
       case CameraMode.allExternal:
         return Column(
           children: [
             Expanded(child: _twoSideBySide(6, 9)),
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _cameraBox(3)),
+                  Expanded(child: _cameraBox(2)),
+                  Expanded(child: _cameraBox(4)),
+                  Expanded(child: _cameraBox(7)),
+                ],
+              ),
+            ),
+          ],
+        );
+      case CameraMode.all:
+        return Column(
+          children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Expanded(child: _cameraBox(6)),
+                  Expanded(child: _cameraBox(9)),
+                  Expanded(child: _cameraBox(5)),
+                  Expanded(child: _cameraBox(8)),
+                ],
+              ),
+            ),
+
             Expanded(
               child: Row(
                 children: [
@@ -224,64 +284,15 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Widget _cameraBox(int a) {
     CameraEntry entry = CameraEntry.fromStationNumber(a);
-    return CameraWindow(key: ValueKey(entry.url), entry: entry);
-  }
-}
-
-class SecretLoader {
-  final String? secretPath;
-
-  SecretLoader({this.secretPath});
-  Future<Secret> load() {
-    return rootBundle.loadStructuredData<Secret>(secretPath!, (jsonStr) async {
-      final secret = Secret.fromJson(jsonDecode(jsonStr));
-      return secret;
-    });
-  }
-}
-
-class Secret {
-  final String apiKey;
-  final String username;
-  final String password;
-  final String controlHost;
-  Secret({
-    this.apiKey = "",
-    this.username = "",
-    this.password = "",
-    this.controlHost = "",
-  });
-  factory Secret.fromJson(Map<String, dynamic> jsonMap) {
-    return Secret(
-      apiKey: jsonMap["api_key"],
-      username: jsonMap["username"],
-      password: jsonMap["password"],
-      controlHost: jsonMap["controlHost"],
+    return CameraWindow(
+      key: ValueKey(entry.url),
+      entry: entry,
+      onSelect:
+          () => setState(() {
+            previousMode = mode;
+            mode = CameraMode.singleWindow;
+            selectedCamera = a; // which camera was tapped
+          }),
     );
   }
-}
-
-void areWeOnLocalNetwork(Function callback) {
-  NetworkInterface.list().then((interfaces) {
-    for (NetworkInterface interface in interfaces) {
-      for (InternetAddress addr in interface.addresses) {
-        if (addr.address.contains('192.168.')) {
-          //On a private network
-          //Need to ping local thermostat to check we are on the same lan
-          Ping('thermostat-host', count: 1).stream.first
-              .then((pingData) {
-                if (pingData.error == null) {
-                  callback(true);
-                } else {
-                  callback(false);
-                }
-              })
-              .catchError((onError) {
-                callback(false);
-              });
-          break;
-        }
-      }
-    }
-  });
 }
